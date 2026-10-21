@@ -27,6 +27,7 @@ class AskResult:
     evidence: list[Evidence] = field(default_factory=list)
     cited: list[Evidence] = field(default_factory=list)
     notice: str = ""                                   # 인용 근거 없음 안내
+    unverified: list[str] = field(default_factory=list)  # 인용한 근거에서 확인되지 않은 수치가 있는 줄
     collect: CollectResult | None = None
     warnings: list[str] = field(default_factory=list)  # 답은 냈지만 알려야 할 것 (수집 일부 실패, 문서 없음 등)
     error: str = ""                                    # 답을 내지 못한 이유 (사용자용 문구)
@@ -91,6 +92,7 @@ def ask(model: dict[str, Any], question: str, calc: str = "", on_step: StepCallb
     result.evidence = state.get("evidence", [])
     result.cited = state.get("cited", [])
     result.notice = state.get("notice", "")
+    result.unverified = state.get("unverified", [])
     if not any(e.source_type != "model_meta" for e in result.evidence):
         result.warnings.append("관련 외부 문서를 찾지 못해 모델 메타데이터만 근거로 답했습니다.")
     log.info("질문 처리 %s | %s", model["id"], {k: round(v, 1) for k, v in result.timings.items()})

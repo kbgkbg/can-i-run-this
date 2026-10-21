@@ -21,7 +21,7 @@
 | Hugging Face 모델 카드 | `https://huggingface.co/{모델ID}/raw/main/README.md` (후보 검색: `/api/models?search=`) | 모델 페이지 URL | 모델 카드별 라이선스(각 저장소의 license 필드·LICENSE 파일)를 따른다. 원문 링크를 함께 표시 |
 | Hugging Face 라이선스 원문 (라이선스 질문일 때만) | `https://huggingface.co/{모델ID}/raw/main/{license_link 경로 또는 LICENSE, LICENSE.md, LICENSE.txt}` | 파일 URL | 라이선스 원문 자체. 답변에는 "법률 자문이 아니며, 정확한 조건은 원문 라이선스를 확인하세요." 안내를 붙인다 |
 | 위키백과 (한국어 우선, 없으면 영어) | MediaWiki API `list=search`, `prop=extracts&explaintext` | 문서 URL | CC BY-SA 4.0 — 출처(문서 URL)와 라이선스를 표시. User-Agent에 프로젝트명과 연락처 포함 |
-| arXiv PDF (Phase 8) | | PDF URL + 쪽 번호 | |
+| arXiv 기술 보고서 PDF | 후보: 모델 HF 태그의 `arxiv:<ID>` → `https://export.arxiv.org/api/query?id_list=` (제목·초록), 본문: `https://arxiv.org/pdf/<ID>` (pypdf, 최대 40쪽) | PDF URL + 쪽 번호 (`#page=N`) | 논문별 라이선스 (arXiv 초록 페이지 표시). arXiv API 이용 규칙에 따라 호출 간격 3초 이상. "Thank you to arXiv for use of its open access interoperability." |
 
 - 수집 시각은 청크 메타데이터 `collected_at`에 문서별로 남는다.
 - 원문은 `data/cache/docs/`에 저장되고(커밋하지 않음), 같은 문서를 다른 모델이 고르면 다시 받지 않는다.

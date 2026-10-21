@@ -9,17 +9,17 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
 from app.collect import cache, http
-from app.collect.sources import hf_card, offline, wikipedia
+from app.collect.sources import arxiv_pdf, hf_card, offline, wikipedia
 from app.collect.sources.base import Candidate, Document
 from app.config import get_config
 from app.data_prep.item_text import item_text
 from app.index.indexer import index_document
 from app.log import get_logger
-from app.rag.intent import is_license_question
+from app.rag.intent import is_license_question, is_paper_question
 from app.rag.llm import invoke_json
 from app.rag.prompts import candidate_selection_messages, query_extraction_messages
 
@@ -162,7 +162,8 @@ def select_candidates(model_id: str, question: str, candidates: list[Candidate])
     return picked
 
 
-_FETCHERS = {"hf_card": hf_card.fetch, "hf_license": hf_card.fetch_license, "wikipedia": wikipedia.fetch}
+_FETCHERS = {"hf_card": hf_card.fetch, "hf_license": hf_card.fetch_license, "wikipedia": wikipedia.fetch,
+             "arxiv_pdf": arxiv_pdf.fetch}
 
 
 def _fetch_body(c: Candidate, forced: bool) -> Document | None:
@@ -176,9 +177,22 @@ def _fetch_body(c: Candidate, forced: bool) -> Document | None:
         cache.save_doc(doc)
     doc.query = c.query
     # 너무 긴 문서는 앞부분만 쓴다. 강제 포함 문서(선택 모델의 카드·라이선스 원문)는 이 규칙에서 제외한다.
-    if not forced and len(doc.text) > cfg["max_doc_chars"]:
+    # PDF는 쪽 단위로 색인하며 쪽 수 제한(max_pdf_pages)을 따로 둔다.
+    if not forced and not doc.pages and len(doc.text) > cfg["max_doc_chars"]:
         doc.text = doc.text[:cfg["max_doc_chars"]]
     return doc
+
+
+def _arxiv_candidates(model: dict[str, Any], entry: dict[str, Any], result: CollectResult) -> list[Candidate]:
+    """모델 카드가 연결한 arXiv 논문 후보. 한 번 조회한 목록은 캐시에 두고 다시 API를 부르지 않는다."""
+    if "arxiv" not in entry:
+        try:
+            entry["arxiv"] = [asdict(c) for c in arxiv_pdf.candidates_for(model)]
+        except (http.ExternalAPIError, ValueError) as e:
+            log.warning("arXiv 후보 조회 실패 %s: %s", model["id"], e)
+            result.errors.append("arXiv 논문 정보를 가져오지 못해 일부 후보를 건너뛰었습니다.")
+            return []
+    return [Candidate(**c) for c in entry["arxiv"]]
 
 
 def collect(model: dict[str, Any], question: str, on_step: StepCallback = _noop) -> CollectResult:
@@ -198,14 +212,19 @@ def collect(model: dict[str, Any], question: str, on_step: StepCallback = _noop)
     need_license = (is_license_question(question) and own_license.doc_id not in entry["docs"]
                     and not entry.get("no_license"))
 
-    if not result.new_queries and not need_card and not need_license:
+    # arXiv 기술 보고서 후보: 첫 수집이거나 학습·벤치마크·구조 질문일 때, 아직 색인하지 않은 것만 (F2016)
+    arxiv_new: list[Candidate] = []
+    if not get_config()["collect"]["offline_mode"] and (need_card or is_paper_question(question)):
+        arxiv_new = [c for c in _arxiv_candidates(model, entry, result) if c.doc_id not in entry["docs"]]
+
+    if not result.new_queries and not need_card and not need_license and not arxiv_new:
         result.cache_hit = True
         result.docs_total = len(entry["docs"])
         on_step("수집 생략", f"이미 수집된 문서 {result.docs_total}건 사용")
         return result
 
     on_step("후보 수집", f"검색어 {len(result.new_queries)}개로 후보 문서 검색 중")
-    candidates = gather_candidates(result.new_queries, model, result)
+    candidates = gather_candidates(result.new_queries, model, result) + arxiv_new
     # 모델 카드는 선별 대상이 아니라 강제 포함, 이미 색인한 문서는 다시 고르지 않는다
     result.candidates = [c for c in candidates if c.doc_id != own_card.doc_id and c.doc_id not in entry["docs"]]
 

@@ -63,6 +63,8 @@ def main() -> int:
         print(f"  {e.tag} {e.title} — {e.url}")
     if state["notice"]:
         print("  " + state["notice"])
+    for u in state.get("unverified", []):
+        print(f"  ⚠ 근거에서 확인되지 않은 수치: {u}")
     bad = invalid_citations(state["answer"], state["evidence"])
     if bad:
         print(f"  경고: 근거 목록에 없는 번호 인용 {bad}")

@@ -280,6 +280,9 @@ def render_message(msg: dict, stream_tok_s: float | None = None) -> None:
             st.markdown(msg["content"])
         if msg["role"] == "assistant" and not msg.get("error"):
             render_sources(msg)
+            if msg.get("unverified"):
+                st.warning("인용한 근거에서 확인되지 않은 수치가 있습니다. 원문을 직접 확인하세요.\n\n"
+                           + "\n".join(f"- {md_escape(u)}" for u in msg["unverified"]))
             for w in msg.get("warnings", []):
                 st.caption(f"ℹ {w}")
             if msg.get("elapsed"):
@@ -307,6 +310,7 @@ def handle_question(m: dict, question: str, calc: str) -> dict:
         "content": result.answer,
         "cited": [{"n": e.n, "title": e.title, "label": e.label, "url": e.url} for e in result.cited],
         "notice": result.notice,
+        "unverified": result.unverified,
         "warnings": result.warnings,
         "elapsed": sum(result.timings.values()),
     }

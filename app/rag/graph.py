@@ -9,7 +9,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from app.rag.citations import NO_CITATION_NOTICE, cited_evidence, cited_numbers
+from app.rag.citations import NO_CITATION_NOTICE, cited_evidence, cited_numbers, unverified_numbers
 from app.rag.intent import is_license_question
 from app.rag.llm import chat_model
 from app.rag.prompts import LICENSE_DISCLAIMER, answer_messages
@@ -25,6 +25,7 @@ class RAGState(TypedDict, total=False):
     answer: str
     cited: list[Evidence]     # 답변에 실제로 인용된 근거
     notice: str               # 인용 근거가 없을 때 안내 문구
+    unverified: list[str]     # [근거 n]을 붙였지만 그 근거에 없는 수치가 있는 줄 (환각 경고)
 
 
 def evidence_block(evidence: list[Evidence]) -> str:
@@ -49,7 +50,8 @@ def generate_node(state: RAGState) -> dict[str, Any]:
     if is_license_question(state["question"]) and LICENSE_DISCLAIMER not in answer:
         answer = f"{answer.rstrip()}\n\n⚖ {LICENSE_DISCLAIMER}"
     cited = cited_evidence(answer, state["evidence"])
-    return {"answer": answer, "cited": cited, "notice": "" if cited else NO_CITATION_NOTICE}
+    return {"answer": answer, "cited": cited, "notice": "" if cited else NO_CITATION_NOTICE,
+            "unverified": unverified_numbers(answer, state["evidence"], state.get("calc", ""))}
 
 
 @lru_cache(maxsize=1)
