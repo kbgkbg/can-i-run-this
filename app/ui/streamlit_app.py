@@ -24,17 +24,19 @@ from app.data_prep.item_text import format_params, load_models  # noqa: E402
 from app.features import hw_detect  # noqa: E402
 from app.features.fit import FitReport, assess, calc_text  # noqa: E402
 from app.features.hw_detect import Hardware  # noqa: E402
-from app.features.recommend import search as recommend_search  # noqa: E402
+from app.features import consult, persona  # noqa: E402
+from app.features.recommend import Recommendation, search as recommend_search  # noqa: E402
 from app.features.speed import SpeedEstimate, estimate_all  # noqa: E402
 from app.index.indexer import count_model_docs  # noqa: E402
 from app.index.store import META_COLLECTION, count  # noqa: E402
 from app.log import get_logger  # noqa: E402
-from app.rag.pipeline import ask  # noqa: E402
+from app.rag.pipeline import ask, user_message  # noqa: E402
 
 log = get_logger("ui")
 st.set_page_config(page_title="Can I run this model?", page_icon="🖥️", layout="wide")
 
 NO_GPU = "GPU 없음 (CPU만)"
+MODE_ASK, MODE_CONSULT = "모델에게 묻기", "추천 상담"
 VERDICT_ICON = {"GPU에 전부 올라감": "🟢", "일부 CPU 오프로딩 필요": "🟡", "CPU·RAM만으로 가능(느림)": "🟠", "불가": "🔴", "정보 부족": "⚪"}
 
 
@@ -114,6 +116,8 @@ def hardware_panel() -> None:
 def sidebar(models: dict[str, dict]) -> tuple[dict | None, Any]:
     """(선택 모델, 수집 문서 목록을 나중에 채울 사이드바 자리)"""
     with st.sidebar:
+        st.radio("모드", [MODE_ASK, MODE_CONSULT], key="mode", horizontal=True,
+                 help="추천 상담: 챗봇과 대화하며 조건을 말하면 맞는 모델을 찾아 줍니다.")
         st.header("모델 선택")
         ids = list(models)  # models.json 순서 = 다운로드순
         model_id = st.selectbox(
@@ -158,6 +162,24 @@ def run_recommend(text: str) -> None:
 
 def _choose_model(model_id: str) -> None:
     st.session_state["model_id"] = model_id  # 카드를 누르면 그 모델을 선택해 대화로 이어간다
+    st.session_state["mode"] = MODE_ASK
+
+
+def render_rec_card(rec_item: Recommendation, key: str) -> None:
+    with st.container(border=True):
+        st.markdown(f"**{md_escape(rec_item.model_id)}**")
+        if rec_item.quant:
+            sp = f", 약 {rec_item.tok_s:.0f} tok/s" if rec_item.tok_s else ""
+            st.caption(f"{VERDICT_ICON.get(rec_item.verdict, '')} {rec_item.quant}: {rec_item.verdict} "
+                       f"({rec_item.total_gb:.1f} GB{sp}, 계산값)")
+        elif rec_item.verdict:
+            st.caption(f"{VERDICT_ICON.get(rec_item.verdict, '')} {rec_item.verdict}")
+        st.write(rec_item.reason)
+        if rec_item.evidence:
+            st.caption(f"근거 (모델 메타데이터): “{md_escape(rec_item.evidence)}” · [원문]({rec_item.url})")
+        else:
+            st.caption(f"근거 (모델 메타데이터): 언어·크기 표기 · [원문]({rec_item.url})")
+        st.button("이 모델로 대화", key=key, on_click=_choose_model, args=(rec_item.model_id,), width="stretch")
 
 
 def recommend_cards() -> None:
@@ -177,21 +199,8 @@ def recommend_cards() -> None:
             st.info("조건을 모두 만족하는 모델을 찾지 못했습니다. 조건을 줄여 다시 찾아보세요.")
         cols = st.columns(2)
         for i, rec_item in enumerate(r.results):
-            with cols[i % 2].container(border=True):
-                st.markdown(f"**{md_escape(rec_item.model_id)}**")
-                if rec_item.quant:
-                    sp = f", 약 {rec_item.tok_s:.0f} tok/s" if rec_item.tok_s else ""
-                    st.caption(f"{VERDICT_ICON.get(rec_item.verdict, '')} {rec_item.quant}: {rec_item.verdict} "
-                               f"({rec_item.total_gb:.1f} GB{sp}, 계산값)")
-                elif rec_item.verdict:
-                    st.caption(f"{VERDICT_ICON.get(rec_item.verdict, '')} {rec_item.verdict}")
-                st.write(rec_item.reason)
-                if rec_item.evidence:
-                    st.caption(f"근거 (모델 메타데이터): “{md_escape(rec_item.evidence)}” · [원문]({rec_item.url})")
-                else:
-                    st.caption(f"근거 (모델 메타데이터): 언어·크기 표기 · [원문]({rec_item.url})")
-                st.button("이 모델로 대화", key=f"pick_{rec_item.model_id}", on_click=_choose_model,
-                          args=(rec_item.model_id,), width="stretch")
+            with cols[i % 2]:
+                render_rec_card(rec_item, key=f"pick_{rec_item.model_id}")
         for n in r.notes:
             st.caption(f"ℹ {n}")
 
@@ -289,7 +298,8 @@ def _paced(text: str, tok_s: float):
 
 def render_message(msg: dict, stream_tok_s: float | None = None) -> None:
     with st.chat_message(msg["role"]):
-        if stream_tok_s and msg["role"] == "assistant" and not msg.get("error"):
+        # 흉내 답변이 있으면 "내 PC에서 돌린 모델"에 해당하는 흉내 답변만 추정 속도로 재생한다
+        if stream_tok_s and msg["role"] == "assistant" and not msg.get("error") and not msg.get("persona"):
             st.caption(f"⏱ 내 PC 추정 속도 {stream_tok_s:.1f} tok/s로 재생 중 (추정치, 실제와 다를 수 있음)")
             st.write_stream(_paced(msg["content"], stream_tok_s))
         else:
@@ -303,6 +313,27 @@ def render_message(msg: dict, stream_tok_s: float | None = None) -> None:
                 st.caption(f"ℹ {w}")
             if msg.get("elapsed"):
                 st.caption(f"처리 시간 {msg['elapsed']:.1f}초")
+    if msg.get("persona"):
+        render_persona(msg["persona"], stream_tok_s)
+
+
+def render_persona(pa: dict, stream_tok_s: float | None = None) -> None:
+    """흉내 답변 (연기). RAG 답변과 구분되게 별도 말풍선·안내·바뀐 내용을 함께 보인다."""
+    with st.chat_message("🎭", avatar="🎭"):
+        st.markdown(f"**{md_escape(pa['model_id'])} · {pa['quant']} · {pa['tier']} 체급(유효 약 {pa['params_b']}B) 흉내 답변**")
+        st.caption(persona.PERSONA_NOTICE)
+        if stream_tok_s:
+            st.caption(f"⏱ 내 PC 추정 속도 {stream_tok_s:.1f} tok/s로 재생 중 (추정치)")
+            st.write_stream(_paced(pa["answer"], stream_tok_s))
+        else:
+            st.markdown(pa["answer"])
+        changes = []
+        if pa["removed"] or pa["added"]:
+            changes.append(f"- 위 근거 기반 답변과 비교해 사라진 수치: {', '.join(pa['removed']) or '없음'} / "
+                           f"새로 생긴 수치: {', '.join(pa['added']) or '없음'} (코드로 비교)")
+        changes += [f"- {md_escape(x)}" for x in pa["mistakes"]]
+        with st.expander(f"연출로 바꾼 내용 보기 ({len(pa['mistakes'])}건 설명)"):
+            st.markdown("\n".join(changes) or "바꾼 내용이 없습니다 (큰 체급).")
 
 
 def handle_question(m: dict, question: str, calc: str) -> dict:
@@ -332,20 +363,105 @@ def handle_question(m: dict, question: str, calc: str) -> dict:
     }
 
 
-def speed_controls(report: FitReport | None, speeds: dict[str, SpeedEstimate]) -> float | None:
-    """'내 PC 속도로 체험' 토글. 켜면 선택한 양자화의 추정 속도를 돌려준다."""
+def experience_controls(m: dict, report: FitReport | None, speeds: dict[str, SpeedEstimate]) -> tuple[float | None, str | None]:
+    """체험 토글: '내 PC 속도로 체험'(추정 tok/s로 재생)과 '🎭 흉내 답변'(이 모델 체급의 답 연기).
+
+    반환: (재생 속도 또는 None, 흉내 답변에 쓸 양자화 또는 None)
+    """
     usable = [r.quant for r in (report.rows if report else []) if speeds.get(r.quant) and speeds[r.quant].tok_s]
-    if not usable:
-        return None
-    c1, c2 = st.columns([1, 1])
-    on = c1.toggle("내 PC 속도로 체험", key="speed_exp", help="답변을 이 PC에서 모델을 돌렸을 때의 추정 생성 속도로 보여 줍니다.")
-    best = report.best()
-    default = usable.index(best.quant) if best and best.quant in usable else 0
+    quants = usable or list(get_config()["quantization"])
+    best = report.best() if report else None
+    default = quants.index(best.quant) if best and best.quant in quants else quants.index("Q4_K_M") if "Q4_K_M" in quants else 0
+    c1, c2, c3 = st.columns([1, 1, 1])
+    speed_on = c1.toggle("내 PC 속도로 체험", key="speed_exp", disabled=not usable,
+                         help="답변을 이 PC에서 모델을 돌렸을 때의 추정 생성 속도로 보여 줍니다."
+                              + ("" if usable else " (하드웨어를 입력하고 대역폭을 아는 경우에만)"))
+    persona_on = c2.toggle("🎭 이 모델 흉내 답변", key="persona_exp",
+                           help="이 모델 체급이 근거 없이 답했다면 어떨지 연기한 답을 함께 보여 줍니다. 실제 모델 출력이 아닙니다.")
     # 키에 추천 양자화를 넣어, 컨텍스트·모델 변경으로 추천이 바뀌면 기본값도 따라가게 한다
     # (한 키를 쓰면 위젯이 처음 값을 기억해 4k에서의 추천 Q8_0이 32k에서도 남았다)
-    quant = c2.selectbox("체험 양자화", usable, index=default, key=f"speed_quant::{report.model_id}::{usable[default]}",
-                         label_visibility="collapsed", disabled=not on)
-    return speeds[quant].tok_s if on else None
+    quant = c3.selectbox("체험 양자화", quants, index=default, key=f"speed_quant::{m['id']}::{quants[default]}",
+                         label_visibility="collapsed", disabled=not (speed_on or persona_on))
+    tok_s = speeds[quant].tok_s if speed_on and quant in usable else None
+    return tok_s, (quant if persona_on else None)
+
+
+def add_persona(m: dict, quant: str, question: str, reply: dict) -> None:
+    """RAG 답변을 기준 답으로 이 모델 체급의 흉내 답변을 만들어 reply에 붙인다."""
+    if reply.get("error"):
+        return
+    with st.spinner("이 모델 체급의 답을 연기하는 중..."):
+        try:
+            pa = persona.answer(m, quant, question, base=reply["content"])
+        except Exception:  # noqa: BLE001
+            log.exception("흉내 답변 실패")
+            st.caption("ℹ 흉내 답변을 만들지 못했습니다.")
+            return
+    reply["persona"] = {"model_id": m["id"], "quant": quant, "tier": pa.persona.tier, "params_b": pa.persona.params_b,
+                        "answer": pa.answer, "mistakes": pa.mistakes, "removed": pa.removed_numbers, "added": pa.added_numbers}
+
+
+# ------------------------------------------------------------------ 추천 상담 (F2011 대화형)
+def consult_page() -> None:
+    st.subheader("💬 모델 추천 상담")
+    st.caption("용도·언어·크기·하드웨어를 말하면 조건에 맞는 모델을 메타데이터 근거와 함께 찾아 드립니다. "
+               "예: \"코딩용인데 한국어도 되면 좋겠어. 그래픽카드는 RTX 3080, 램 32기가\"")
+    history = st.session_state.setdefault("consult", [])
+    for i, msg in enumerate(history):
+        render_consult_message(msg, i)
+    text = st.chat_input("원하는 모델 조건을 말해 주세요")
+    if not text:
+        return
+    history.append({"role": "user", "content": text})
+    render_consult_message(history[-1], len(history) - 1)
+    with st.spinner("조건을 정리하는 중..."):
+        try:
+            asked = 0  # 마지막 검색 이후 되물은 횟수
+            for h in reversed(history[:-1]):
+                if h["role"] == "assistant":
+                    if "cards" in h:
+                        break
+                    asked += 1
+            turn = consult.step([{"role": h["role"], "content": h["content"]} for h in history], current_hw(), asked)
+        except Exception as e:  # noqa: BLE001
+            log.exception("추천 상담 실패")
+            history.append({"role": "assistant", "content": f"⚠ {user_message(e)}"})
+            render_consult_message(history[-1], len(history) - 1)
+            return
+    reply: dict = {"role": "assistant", "content": turn.message, "notes": [turn.hw_note] if turn.hw_note else []}
+    if turn.hardware is not None:
+        st.session_state["hw"] = turn.hardware.to_dict()
+    if turn.action == "search":
+        with st.spinner("조건에 맞는 모델을 찾는 중..."):
+            try:
+                r = recommend_search(turn.condition, current_hw())
+            except Exception as e:  # noqa: BLE001
+                log.exception("상담 중 조건 탐색 실패")
+                reply["content"] += f"\n\n⚠ {user_message(e)}"
+                r = None
+        if r is not None:
+            # 결과 설명은 코드가 카드 내용으로 만든다 (근거 없는 추천 이유가 섞이지 않게)
+            found = (f"조건 \"{turn.condition}\"으로 모델 메타데이터 후보 {r.candidates}건을 살펴, 조건을 모두 확인할 수 있는 "
+                     f"{len(r.results)}개를 골랐습니다." if r.results else
+                     f"조건 \"{turn.condition}\"을 모두 만족하는 모델을 메타데이터에서 찾지 못했습니다. 조건을 줄여 말씀해 주세요.")
+            reply["content"] = f"{turn.message}\n\n{found}"
+            reply["cards"] = r.results
+            reply["notes"] += r.notes
+    history.append(reply)
+    render_consult_message(reply, len(history) - 1)
+
+
+def render_consult_message(msg: dict, idx: int) -> None:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+        cards = msg.get("cards") or []
+        if cards:
+            cols = st.columns(2)
+            for j, rec_item in enumerate(cards):
+                with cols[j % 2]:
+                    render_rec_card(rec_item, key=f"consult_pick_{idx}_{j}")
+        for n in msg.get("notes", []):
+            st.caption(f"ℹ {n}")
 
 
 def main() -> None:
@@ -355,6 +471,9 @@ def main() -> None:
     if models is None:
         return
     m, docs_slot = sidebar(models)
+    if st.session_state.get("mode") == MODE_CONSULT:
+        consult_page()
+        return
     recommend_cards()
     if m is None:
         st.info("왼쪽에서 질문할 모델을 선택하세요.")
@@ -373,13 +492,15 @@ def main() -> None:
     for msg in history:
         render_message(msg)
 
-    stream_tok_s = speed_controls(report, speeds)
+    stream_tok_s, persona_quant = experience_controls(m, report, speeds)
     question = st.chat_input(f"{m['name']}에 대해 질문하세요 (예: Q4로 돌리면 메모리 얼마나 필요해?)")
     if question:
         user_msg = {"role": "user", "content": question}
         history.append(user_msg)
         render_message(user_msg)
         reply = handle_question(m, question, calc)
+        if persona_quant:
+            add_persona(m, persona_quant, question, reply)
         history.append(reply)
         render_message(reply, stream_tok_s=stream_tok_s)
     render_doc_status(m, docs_slot)

@@ -77,6 +77,22 @@ recommend:
   candidate_k: 30            # model_meta 의미 검색 후보 수 (언어 조건이 있으면 본문 필터 검색 결과를 더한다)
   max_results: 6             # 카드로 보여 줄 최대 모델 수
 
+# 모델 흉내 답변 (F2010 확장, 체험용 연기). 아래 구간과 실수 개수는 가정값이다 (실측·벤치마크 근거 아님).
+# 1단계: 같은 LLM이 근거 없이 답한다 (검색 없는 로컬 모델 상황)
+# 2단계: 체급에 맞게 고쳐 쓴다. "틀려라"는 지시는 잘 안 지켜져서, 넣을 실수 개수를 정확히 지정하고 목록을 함께 받는다
+persona:
+  # 체급을 정하는 유효 파라미터(십억). MoE는 sqrt(전체 × 활성)로 근사한다 (경험적 근사, 가정값)
+  tiers:
+    - {max_b: 1.5,    label: 초소형, errors: 3, drop_condition: true,  repeat: true,  max_sentences: 3}
+    - {max_b: 4.5,    label: 소형,   errors: 2, drop_condition: true,  repeat: false, max_sentences: 5}
+    - {max_b: 10,     label: 중형,   errors: 1, drop_condition: false, repeat: false, max_sentences: 8}
+    - {max_b: 40,     label: 대형,   errors: 0, drop_condition: false, repeat: false, max_sentences: 0}
+    - {max_b: 100000, label: 초대형, errors: 0, drop_condition: false, repeat: false, max_sentences: 0}
+  # 양자화가 낮을수록 표현이 조금 거칠어진다는 지시 (가정값, 사실 오류 개수는 늘리지 않는다)
+  quant_notes:
+    Q4_K_M: "4비트 양자화 느낌으로 문장 한두 곳을 약간 어색하게 만든다."
+    Q5_K_M: "문장 한 곳을 아주 약간 어색하게 만든다."
+
 # 하드웨어 판정 / 속도 추정 (F2010)
 hardware:
   apple_gpu_mem_ratio: 0.7   # 통합 메모리 중 GPU가 쓸 수 있다고 보는 비율 (가정값, 조정 가능)

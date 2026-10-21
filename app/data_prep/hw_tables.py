@@ -47,31 +47,38 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
 
 
+# 사람들이 흔히 생략하는 제조사·브랜드 단어 ("4090", "3080 Ti", "M3 Max"처럼 말해도 맞추기 위해)
+_OPTIONAL_WORDS = {"nvidia", "geforce", "rtx", "apple"}
+
+
 def match_gpu(detected_name: str, vram_gb: float | None = None, gpu_cores: int | None = None) -> HWSpec | None:
-    """감지된 이름(예: "NVIDIA GeForce RTX 4070", "Apple M3 Max")을 사양표 행에 맞춘다.
+    """감지된 이름(예: "NVIDIA GeForce RTX 4070", "Apple M3 Max", 대화 속 "4090")을 사양표 행에 맞춘다.
 
     - 사양표 이름의 단어가 모두 들어 있는 행 중 가장 긴 이름을 고른다 ("RTX 4070 Ti"가 "RTX 4070"보다 우선).
-    - 같은 이름에 VRAM만 다른 행(예: 4060 Ti 16GB/8GB)은 감지된 VRAM에 가까운 쪽을 고른다.
+      제조사·브랜드 단어(NVIDIA, GeForce, RTX, Apple)는 없어도 된다.
+    - 같은 이름에 VRAM만 다른 행(예: 4060 Ti 16GB/8GB)은 감지된 VRAM에 가까운 쪽, VRAM을 모르면 구분자 없는 기본 행.
     - Apple M3/M4 Max처럼 GPU 코어 수로 갈리는 행은 감지된 GPU 코어 수로 고른다.
     """
     words = set(_norm(detected_name).split())
     candidates = []
     for s in load_specs():
         base = re.sub(r"\s*\(.*?\)|\s+\d+GB$", "", s.name)  # "(40-core GPU)", " 16GB" 같은 구분자는 뺀 핵심 이름
-        if set(_norm(base).split()) <= words:
-            candidates.append((len(_norm(base)), s))
+        need = set(_norm(base).split()) - _OPTIONAL_WORDS
+        if need and need <= words:
+            candidates.append((len(need), s, base))
     if not candidates:
         return None
-    longest = max(n for n, _ in candidates)
-    tied = [s for n, s in candidates if n == longest]
+    longest = max(n for n, _, _ in candidates)
+    tied = [(s, base) for n, s, base in candidates if n == longest]
     if len(tied) == 1:
-        return tied[0]
+        return tied[0][0]
     if gpu_cores is not None:
-        for s in tied:
+        for s, _ in tied:
             if f"{gpu_cores}-core GPU" in s.name:
                 return s
     if vram_gb is not None:
-        with_vram = [s for s in tied if s.vram_gb]
+        with_vram = [s for s, _ in tied if s.vram_gb]
         if with_vram:
             return min(with_vram, key=lambda s: abs(s.vram_gb - vram_gb))
-    return tied[0]
+    plain = [s for s, base in tied if s.name == base]
+    return plain[0] if plain else tied[0][0]

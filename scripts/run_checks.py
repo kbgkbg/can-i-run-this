@@ -172,6 +172,23 @@ def _():
     return bool(ok), ", ".join(x.model_id for x in r.results)
 
 
+@check("F2010", "흉내 답변 체급: 유효 파라미터로 구간 결정 (MoE는 sqrt(전체×활성))")
+def _():
+    from app.features.persona import make_persona
+    got = {i: make_persona(models[i], "Q4_K_M").tier for i in
+           ["Qwen/Qwen3-0.6B", "Qwen/Qwen3-4B", "Qwen/Qwen3-8B", "Qwen/Qwen3-30B-A3B", "Qwen/Qwen3-32B"]}
+    exp = ["초소형", "소형", "중형", "중형", "대형"]
+    return list(got.values()) == exp, ", ".join(f"{k.split('/')[1]}={v}" for k, v in got.items())
+
+
+@check("F2011", "대화 속 GPU 이름 매칭 (줄임말·VRAM 구분)")
+def _():
+    from app.data_prep.hw_tables import match_gpu
+    cases = {"4090": "RTX 4090", "3080 ti": "RTX 3080 Ti", "RTX 3080": "RTX 3080", "M4 Pro": "Apple M4 Pro"}
+    got = {k: (match_gpu(k).name if match_gpu(k) else None) for k in cases}
+    return got == cases, str(got)
+
+
 @check("F2012", "라이선스 질문에 면책 안내")
 def _():
     s = run(MODEL, "이 모델 상업적으로 써도 돼?", concept_queries=[])

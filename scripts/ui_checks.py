@@ -54,6 +54,27 @@ if case == "ctx":
     at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-8B").run()
     out["restored_ctx"] = at.number_input(key="context::Qwen/Qwen3-8B").value
     out["exception"] = len(at.exception)
+if case == "persona":
+    at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-0.6B").run()
+    at.toggle(key="persona_exp").set_value(True).run()
+    at.chat_input[0].set_value("Qwen3-0.6B의 레이어 수와 컨텍스트 길이는?").run()
+    pm = at.chat_message[-1]
+    out["names"] = [x.name for x in at.chat_message]
+    out["notice"] = any("연기(시뮬레이션)" in c.value for c in pm.caption)
+    out["changes"] = [x.value[:120] for x in pm.expander[0].markdown] if pm.expander else []
+    out["exception"] = len(at.exception)
+if case == "consult":
+    at.sidebar.radio(key="mode").set_value("추천 상담").run()
+    at.chat_input[0].set_value("모델 추천해줘").run()
+    at.chat_input[0].set_value("코딩용이면 돼. 그래픽카드는 3080, 램 32기가").run()
+    last = at.chat_message[-1]
+    out["cards"] = [b.key for b in last.button]
+    out["hw"] = (at.session_state["hw"] or {}).get("spec_name")
+    if last.button:
+        last.button[0].click().run()
+        out["mode_after"] = at.session_state["mode"]
+        out["model_after"] = at.session_state["model_id"]
+    out["exception"] = len(at.exception)
 print("@@" + json.dumps(out, ensure_ascii=False))
 '''
 
@@ -87,6 +108,15 @@ def main() -> int:
     rows.append(("F2010", "컨텍스트 32k 설정 후 4k 모델로 전환해도 예외 없음, 돌아오면 값 복원",
                  c.get("exception") == 0 and c.get("small_ctx") == 4096 and c.get("restored_ctx") == 32768,
                  f"전환 후 {c.get('small_ctx')}, 복귀 후 {c.get('restored_ctx')}, 예외 {c.get('exception')}"))
+    pc = run_case("persona")
+    rows.append(("F2010", "🎭 흉내 답변: 근거 답변과 별도 말풍선, 연기 안내, 바뀐 수치 비교 표시",
+                 pc.get("exception") == 0 and pc.get("names", [])[-1:] == ["🎭"] and pc.get("notice") and bool(pc.get("changes")),
+                 f"말풍선 {pc.get('names')}, 안내={pc.get('notice')}, 변경={str(pc.get('changes'))[:90]}"))
+    cs = run_case("consult")
+    rows.append(("F2011", "추천 상담: 되묻기 1회 후 검색, 대화 속 하드웨어 적용, 카드 클릭 시 대화로 전환",
+                 cs.get("exception") == 0 and bool(cs.get("cards")) and cs.get("hw") == "RTX 3080"
+                 and cs.get("mode_after") == "모델에게 묻기" and bool(cs.get("model_after")),
+                 f"카드 {len(cs.get('cards', []))}개, 하드웨어 {cs.get('hw')}, 전환 후 {cs.get('mode_after')} / {cs.get('model_after')}"))
     passed = sum(ok for _, _, ok, _ in rows)
     lines = ["# 화면 기능 점검 결과 (Streamlit AppTest)", "",
              f"- 실행: `python scripts/ui_checks.py` · 통과 {passed}/{len(rows)}", "",

@@ -4,8 +4,8 @@
 
 | 증빙 | 내용 | 재현 명령 |
 |---|---|---|
-| [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 22항목 | `python scripts/run_checks.py` |
-| [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 7항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
+| [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 24항목 | `python scripts/run_checks.py` |
+| [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 9항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
 | [eval/mmr_comparison.md](eval/mmr_comparison.md) | 유사도 vs MMR 근거 비교 (F2014) | `python scripts/compare_mmr.py` |
 | [eval/rag_comparison.md](eval/rag_comparison.md) | RAG 사용 전후 답변 비교 (F2015) | `python scripts/compare_rag.py` |
 | [screenshots/](screenshots/) | 화면 캡처 10장 | Playwright로 실제 앱에서 촬영 |
@@ -24,7 +24,9 @@
 | F2008 | 근거 표시 | `rag/citations.py`, UI | 인용된 근거만, 없으면 안내, 근거 번호 일치 | 통과 | test_results F2008, ui_test F2008, p5_05 |
 | F2009 | 항목 선택 및 질의응답 | `ui/streamlit_app.py` | 모델 전환 시 대화 분리 | 통과 | ui_test F2009 (2 → 0 → 2), p5_02 |
 | F2010 | 도메인 특화 기능 | `features/` | 판정·속도 계산 검산, 근거·계산값 구분 표시 | 통과 | test_results F2010, p6_01~03 |
+| F2010-5 | 모델 흉내 답변 (추가) | `features/persona.py` | 체급 구간, 연기 안내·바뀐 수치 표시 | 통과 | test_results F2010(체급), ui_test F2010(흉내), p10_02~03 |
 | F2011 | 조건 기반 항목 탐색 | `features/recommend.py` | 조건 불일치 모델 미포함, 카드 클릭 → 대화 | 통과 | test_results F2011, p7_01 |
+| F2011-2 | 추천 상담 (추가) | `features/consult.py` | 되묻기 1회 후 검색, 대화 속 하드웨어 적용, 카드 → 대화 | 통과 | ui_test F2011(상담), test_results F2011(GPU 이름), p10_01 |
 | F2012 | 진행 상태 및 안내 | UI, `pipeline.py` | 진행 상태, 색인 0건·키 누락 안내, 면책 | 통과 | ui_test F2012, test_results F2012, p5_04, p7_02 |
 | F2014 | MMR 검색 (심화) | `retrieve.py` | 같은 질문에 similarity/MMR 근거 비교 | 통과 | mmr_comparison.md |
 | F2015 | RAG 전후 비교 (심화) | `compare_rag.py` | 대표 질문 7개 3기준 비교 | 통과 | rag_comparison.md |
@@ -107,7 +109,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 
 ## 3. 테스트 결과표
 
-자동 점검 22항목과 화면 점검 7항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
+자동 점검 24항목과 화면 점검 9항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
 
 추가로 개발 중 수동 확인한 비정상·경계 상황:
 
@@ -159,6 +161,9 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 | p6_03_answer.png | 판정 답변 (계산값 + [근거 1]) |
 | p7_01_recommend.png | 조건 탐색 결과 카드 |
 | p7_02_license.png | 라이선스 답변 (라이선스 원문 근거, 면책 안내) |
+| p10_01_consult.png | 추천 상담 (되묻기 → 대화 속 하드웨어로 판정이 붙은 카드) |
+| p10_02_persona_streaming.png | 🎭 흉내 답변을 추정 속도로 재생 |
+| p10_03_persona_done.png | 흉내 답변 + 바뀐 수치 비교, 근거 답변의 수치 검증 경고 |
 
 ## 6. 상호 체크리스트 (옆 교육생 점검용)
 
@@ -179,6 +184,8 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 | 11 | `.env`의 키를 지우고 실행하면 키 누락 안내가 나온다 | | |
 | 12 | 화면 어디에도 API 키, 프롬프트 전문, 스택 트레이스가 보이지 않는다 | | |
 | 13 | 판정 카드에서 컨텍스트를 크게 올린 뒤 다른 모델로 바꿔도 오류가 나지 않는다 | | |
+| 14 | 🎭 흉내 답변이 근거 답변과 구분되고 "연기" 안내가 보인다. 작은 모델일수록 더 틀린다 | | |
+| 15 | 추천 상담에서 조건을 말하면 카드가 나오고, 카드를 누르면 그 모델 대화로 간다 | | |
 
 - 점검자: ____________ · 점검일: ____________
 
@@ -186,7 +193,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 
 | 항목 | 상태 |
 |---|---|
-| 필수 기능 F2001 ~ F2012가 모두 동작한다 | 완료 (자동 점검 22/22, 화면 점검 7/7) |
+| 필수 기능 F2001 ~ F2012가 모두 동작한다 | 완료 (자동 점검 24/24, 화면 점검 9/9) |
 | 선택한 심화 기능(F2014·F2015·F2016)이 동작하고 필수 기능 결과와 비교되어 있다 | 완료 (mmr_comparison, rag_comparison) |
 | 증명을 위한 스크린샷을 모두 첨부했다 | 완료 (10장). 본인 PC에서 "하드웨어 감지" 자동 감지 화면은 추가 촬영 필요 (개발 환경에 GPU 없음) |
 | 요구사항 정의서·RAG 설계문서·소스코드·README.md | 완료 |
