@@ -17,7 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 
 # 화면/로그에 노출하면 안 되는 환경변수
-SECRET_KEYS = ("OPENAI_API_KEY", "HF_TOKEN")
+SECRET_KEYS = ("OPENAI_API_KEY", "HF_TOKEN", "WIKI_ACCESS_TOKEN")
 
 
 @lru_cache(maxsize=1)
@@ -58,7 +58,7 @@ def describe() -> dict[str, Any]:
         "config": get_config(),
         "env": {
             name: ("설정됨" if env(name) else "없음")
-            for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "HF_TOKEN", "CONTACT_INFO")
+            for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "HF_TOKEN", "WIKI_ACCESS_TOKEN", "CONTACT_INFO")
         },
     }
 

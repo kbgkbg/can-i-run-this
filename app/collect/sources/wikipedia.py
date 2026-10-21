@@ -1,6 +1,11 @@
 """위키백과 (개념 문서: 양자화, 트랜스포머 등). 한국어 우선, 결과가 없으면 영어.
 
 MediaWiki API 사용. User-Agent(프로젝트명 + 연락처)는 http 모듈이 붙인다 (NF2006).
+
+호출 한도 (https://www.mediawiki.org/wiki/Wikimedia_APIs/Rate_limits, 2026년 도입):
+IP로만 식별되는 요청은 분당 10회, 인증된 요청은 계정 기준 분당 200회 이상이다.
+클라우드처럼 출구 IP를 여럿이 공유하는 환경에서는 IP 버킷이 금방 바닥나므로,
+.env에 WIKI_ACCESS_TOKEN(OAuth 2.0 owner-only 액세스 토큰)이 있으면 Bearer로 보낸다.
 이용 조건: CC BY-SA 4.0 (https://ko.wikipedia.org/wiki/위키백과:저작권)
 """
 from __future__ import annotations
@@ -12,6 +17,7 @@ from urllib.parse import quote
 
 from app.collect import http
 from app.collect.sources.base import Candidate, Document
+from app.config import env
 
 SOURCE_TYPE = "wikipedia"
 LICENSE_NOTE = "CC BY-SA 4.0 (위키백과)"
@@ -19,6 +25,11 @@ LICENSE_NOTE = "CC BY-SA 4.0 (위키백과)"
 
 def _api(lang: str) -> str:
     return f"https://{lang}.wikipedia.org/w/api.php"
+
+
+def _headers() -> dict[str, str]:
+    token = env("WIKI_ACCESS_TOKEN")
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 def _strip_html(s: str) -> str:
@@ -31,7 +42,7 @@ def search(query: str, limit: int, langs: list[str]) -> list[Candidate]:
         data = http.get_json(_api(lang), params={
             "action": "query", "list": "search", "srsearch": query,
             "srlimit": limit, "format": "json", "formatversion": 2,
-        })
+        }, headers=_headers())
         hits = data.get("query", {}).get("search", [])
         if hits:
             return [
@@ -54,7 +65,7 @@ def fetch(candidate: Candidate) -> Document | None:
     data = http.get_json(_api(lang), params={
         "action": "query", "prop": "extracts", "explaintext": 1,
         "pageids": pageid, "format": "json", "formatversion": 2,
-    })
+    }, headers=_headers())
     pages = data.get("query", {}).get("pages", [])
     text = (pages[0].get("extract") or "").strip() if pages else ""
     if not text:

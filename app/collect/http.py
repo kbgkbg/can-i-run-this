@@ -35,14 +35,16 @@ _lock = threading.Lock()
 
 
 def user_agent() -> str:
+    """위키미디어 User-Agent 정책 예시 형식: 이름/버전 (연락처) 라이브러리/버전"""
     cfg = get_config()["project"]
     contact = env("CONTACT_INFO") or "contact-not-set"
-    return f"{cfg['name']}/{cfg['version']} (SSAFY AI core project; {contact}) python-requests"
+    return f"{cfg['name']}/{cfg['version']} ({contact}) python-requests/{requests.__version__}"
 
 
 def _get_session() -> requests.Session:
     global _session
     if _session is None:
+        # Session이 쿠키를 유지한다: 위키미디어는 OAuth 토큰과 함께 세션 쿠키를 보내야 인증 등급 한도를 적용한다
         _session = requests.Session()
         _session.headers["User-Agent"] = user_agent()
     return _session
