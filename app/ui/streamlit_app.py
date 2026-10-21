@@ -341,8 +341,10 @@ def speed_controls(report: FitReport | None, speeds: dict[str, SpeedEstimate]) -
     on = c1.toggle("내 PC 속도로 체험", key="speed_exp", help="답변을 이 PC에서 모델을 돌렸을 때의 추정 생성 속도로 보여 줍니다.")
     best = report.best()
     default = usable.index(best.quant) if best and best.quant in usable else 0
-    quant = c2.selectbox("체험 양자화", usable, index=default, key="speed_quant", label_visibility="collapsed",
-                         disabled=not on)
+    # 키에 추천 양자화를 넣어, 컨텍스트·모델 변경으로 추천이 바뀌면 기본값도 따라가게 한다
+    # (한 키를 쓰면 위젯이 처음 값을 기억해 4k에서의 추천 Q8_0이 32k에서도 남았다)
+    quant = c2.selectbox("체험 양자화", usable, index=default, key=f"speed_quant::{report.model_id}::{usable[default]}",
+                         label_visibility="collapsed", disabled=not on)
     return speeds[quant].tok_s if on else None
 
 
