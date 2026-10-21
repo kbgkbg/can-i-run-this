@@ -1,0 +1,44 @@
+name,type,vram_gb,mem_bandwidth_gbps,source_url,note
+RTX 5090,nvidia,32,1792,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,Compare 50 Series Specs 표
+RTX 5080,nvidia,16,960,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,Compare 50 Series Specs 표
+RTX 5070 Ti,nvidia,16,896,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,Compare 50 Series Specs 표
+RTX 5070,nvidia,12,672,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,Compare 50 Series Specs 표
+RTX 5060 Ti 16GB,nvidia,16,448,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,Compare 50 Series Specs 표 (16 GB / 8 GB 모델 대역폭 동일)
+RTX 5060 Ti 8GB,nvidia,8,448,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,Compare 50 Series Specs 표 (16 GB / 8 GB 모델 대역폭 동일)
+RTX 5060,nvidia,8,448,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,Compare 50 Series Specs 표
+RTX 5050,nvidia,8,320,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,Compare 50 Series Specs 표
+RTX 4090,nvidia,24,1008,https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf,Ada 백서 Table 2 (p.13)
+RTX 4080 SUPER,nvidia,16,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 4080,nvidia,16,716.8,https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf,Ada 백서 Table 3 (RTX 4080 16 GB)
+RTX 4070 Ti SUPER,nvidia,16,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 4070 Ti,nvidia,12,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 4070 SUPER,nvidia,12,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 4070,nvidia,12,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 4060 Ti 16GB,nvidia,16,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 4060 Ti 8GB,nvidia,8,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 4060,nvidia,8,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 3090 Ti,nvidia,24,1008,https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf,Ada 백서 Table 2 (비교 대상 열)
+RTX 3090,nvidia,24,936,https://www.nvidia.com/content/PDF/nvidia-ampere-ga-102-gpu-architecture-whitepaper-v2.pdf,Ampere GA102 백서 Table 9 (p.44-45)
+RTX 3080 Ti,nvidia,12,912,https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf,Ada 백서 Table 3 (비교 대상 열)
+RTX 3080 12GB,nvidia,12,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 3080,nvidia,10,760,https://www.nvidia.com/content/PDF/nvidia-ampere-ga-102-gpu-architecture-whitepaper-v2.pdf,Ampere GA102 백서 Table 2 (RTX 3080 10 GB)
+RTX 3070 Ti,nvidia,8,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 3070,nvidia,8,448,https://www.nvidia.com/content/PDF/nvidia-ampere-ga-102-gpu-architecture-whitepaper-v2.pdf,Ampere GA102 백서 Table 10 (p.47)
+RTX 3060 Ti,nvidia,8,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 3060,nvidia,12,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인 (12 GB 모델). 대역폭은 공식 출처 미확인
+Apple M1,apple,,TODO,https://support.apple.com/en-us/111893,공식 사양 페이지에 대역폭 표기 없음
+Apple M1 Pro,apple,,200,https://support.apple.com/en-us/111901,통합 메모리 (GPU 사용 가능량 = RAM × apple_gpu_mem_ratio)
+Apple M1 Max,apple,,400,https://support.apple.com/en-us/111901,통합 메모리
+Apple M1 Ultra,apple,,800,https://support.apple.com/en-us/111900,통합 메모리 (Mac Studio 2022)
+Apple M2,apple,,100,https://support.apple.com/en-us/111867,통합 메모리
+Apple M2 Pro,apple,,200,https://support.apple.com/en-us/111340,통합 메모리
+Apple M2 Max,apple,,400,https://support.apple.com/en-us/111835,통합 메모리
+Apple M2 Ultra,apple,,800,https://support.apple.com/en-us/111835,통합 메모리 (Mac Studio 2023)
+Apple M3,apple,,100,https://support.apple.com/en-us/117735,통합 메모리
+Apple M3 Pro,apple,,150,https://support.apple.com/en-us/117736,통합 메모리
+Apple M3 Max (30-core GPU),apple,,300,https://support.apple.com/en-us/117736,통합 메모리 (14코어 CPU / 30코어 GPU 구성)
+Apple M3 Max (40-core GPU),apple,,400,https://support.apple.com/en-us/117736,통합 메모리 (16코어 CPU / 40코어 GPU 구성)
+Apple M4,apple,,120,https://support.apple.com/en-us/121552,통합 메모리
+Apple M4 Pro,apple,,273,https://support.apple.com/en-us/121553,통합 메모리
+Apple M4 Max (32-core GPU),apple,,410,https://support.apple.com/en-us/121553,통합 메모리 (14코어 CPU / 32코어 GPU 구성)
+Apple M4 Max (40-core GPU),apple,,546,https://support.apple.com/en-us/121553,통합 메모리 (16코어 CPU / 40코어 GPU 구성)

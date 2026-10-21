@@ -34,6 +34,7 @@ class CollectResult:
     new_queries: list[str] = field(default_factory=list)        # 캐시에 없어 실제로 수집한 검색어
     query_fallback: bool = False                                 # 프롬프트 1 실패로 기본 검색어를 썼는지
     candidates: list[Candidate] = field(default_factory=list)
+    filtered: list[str] = field(default_factory=list)            # 코드 필터로 뺀 다른 모델 저장소 (선별 전)
     selected: list[str] = field(default_factory=list)
     rejected: list[str] = field(default_factory=list)
     selection_reason: str = ""
@@ -88,6 +89,30 @@ def route(query: str, model: dict[str, Any]) -> str:
     return "wiki"
 
 
+# 같은 모델의 양자화·배포 변형으로 인정하는 접미 토큰 (저장소 이름 = 모델명 + 이 토큰들)
+_VARIANT_TOKEN = re.compile(
+    r"^(gguf|ggml|awq|gptq|exl2|mlx|onnx|fp8|fp16|bf16|f16|f32|int4|int8|bnb|4bit|8bit|quantized|"
+    r"i?q\d(_[a-z0-9]+)*|\d+bit)$", re.IGNORECASE)
+
+
+def same_model_repo(candidate_repo: str, model: dict[str, Any]) -> bool:
+    """HF 후보가 선택 모델 자체의 변형 저장소인지 (예: Qwen3-8B -> Qwen3-8B-GGUF, Qwen3-8B-Q4_K_M-GGUF).
+
+    프롬프트 2가 쓸 만한 후보가 없을 때 Qwen3-VL-8B나 abliterated 파생처럼 다른 모델을 고르는 일이 있어,
+    선별 전에 코드로 거른다. 저장소 이름이 모델명으로 시작하고(앞에 "원제작사_"가 붙는 관례 허용),
+    나머지가 양자화·배포 형식 표기뿐이어야 한다.
+    """
+    repo = candidate_repo.split("/", 1)[-1].lower()
+    name = model["name"].lower()
+    org_prefix = f"{model['org'].lower()}_"
+    if repo.startswith(org_prefix):
+        repo = repo[len(org_prefix):]
+    if not repo.startswith(name):
+        return False
+    parts = [p for p in re.split(r"[-.]", repo[len(name):]) if p]
+    return all(_VARIANT_TOKEN.match(p) for p in parts)
+
+
 def gather_candidates(queries: list[str], model: dict[str, Any], result: CollectResult) -> list[Candidate]:
     cfg = get_config()["collect"]
     n = cfg["candidates_per_query"]
@@ -102,6 +127,9 @@ def gather_candidates(queries: list[str], model: dict[str, Any], result: Collect
         for name, run in searches:
             try:
                 for c in run():
+                    if c.source_type == "hf_card" and not same_model_repo(c.extra["model_id"], model):
+                        result.filtered.append(c.doc_id)
+                        continue
                     found.setdefault(c.doc_id, c)
             except http.ExternalAPIError as e:
                 log.warning("후보 검색 실패 %s %r: %s", name, q, e)

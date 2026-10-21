@@ -9,7 +9,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from app.rag.citations import NO_CITATION_NOTICE, cited_evidence
+from app.rag.citations import NO_CITATION_NOTICE, cited_evidence, cited_numbers
 from app.rag.llm import chat_model
 from app.rag.prompts import answer_messages
 from app.rag.retrieve import Evidence, retrieve
@@ -34,9 +34,16 @@ def retrieve_node(state: RAGState) -> dict[str, Any]:
     return {"evidence": retrieve(state["model_id"], state["question"], state.get("concept_queries"))}
 
 
+CALC_SOURCE_NOTE = ("(계산값은 [근거 1] 모델 메타데이터의 파라미터 수·레이어 수·KV 헤드 수와 하드웨어 사양표의 "
+                    "메모리 대역폭으로 계산한 추정치이며, 실제 런타임과 설정에 따라 다를 수 있습니다.)")
+
+
 def generate_node(state: RAGState) -> dict[str, Any]:
     messages = answer_messages(state["model_id"], state["question"], evidence_block(state["evidence"]), state.get("calc", ""))
     answer = chat_model().invoke(messages).content
+    # 판정·속도(계산값)를 썼는데 그 입력값의 출처인 [근거 1]을 밝히지 않았으면 코드에서 붙인다 (F2010 근거 제시)
+    if state.get("calc") and "계산값" in answer and 1 not in cited_numbers(answer):
+        answer = f"{answer.rstrip()}\n\n{CALC_SOURCE_NOTE}"
     cited = cited_evidence(answer, state["evidence"])
     return {"answer": answer, "cited": cited, "notice": "" if cited else NO_CITATION_NOTICE}
 

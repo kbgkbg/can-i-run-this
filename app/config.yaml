@@ -75,16 +75,24 @@ hardware:
   speed_efficiency: 0.6      # 실효 대역폭 / 이론 대역폭 (가정값, 실측으로 보정 예정)
   default_context: 4096      # 판정에 쓸 기본 컨텍스트 길이
   kv_cache_bytes: 2          # KV 캐시 원소당 바이트 (FP16)
+  ram_usable_ratio: 0.8      # 시스템 RAM 중 모델이 쓸 수 있다고 보는 비율, 나머지는 OS·다른 프로그램 몫 (가정값)
+  # CPU 오프로딩·CPU 전용 속도 추정에 쓰는 시스템 RAM 대역폭 (GB/s). 가정값: DDR4-3200 듀얼채널
+  # = 3200 MT/s × 8바이트 × 2채널 = 51.2 (규격 정의에 따른 계산). 본인 PC 메모리에 맞게 바꿀 것 (DDR5-5600 듀얼 = 89.6)
+  system_ram_bandwidth_gbps: 51.2
+  stream_chars_per_token: 3  # 속도 체험에서 답변 글자 수를 토큰 수로 바꾸는 근사 (가정값)
 
 # 양자화별 가중치당 비트 수 (bits per weight)
-# 출처: llama.cpp k-quants 설명 (ggml-org/llama.cpp PR #1684), ggml 블록 구조 정의
-#   Q8_0 = 32개 int8 + fp16 scale = 34바이트/32가중치 = 8.5 bpw
-#   Q4_K = 4.5 bpw, Q5_K = 5.5 bpw, Q6_K = 6.5625 bpw (PR #1684 본문)
-# Q4_K_M / Q5_K_M은 일부 텐서를 더 높은 비트로 두는 혼합 방식이라 실제 bpw가 기본값보다 크다.
-# TODO(보정 필요): 실제 GGUF 파일 크기 ÷ 파라미터 수로 실효 bpw를 측정해 갱신할 것
+# - Q6_K, Q8_0: llama.cpp ggml/src/ggml-common.h 블록 구조 정의 (2026-10-21 확인)
+#     https://raw.githubusercontent.com/ggml-org/llama.cpp/master/ggml/src/ggml-common.h
+#     block_q6_K "Effectively 6.5625 bits per weight", block_q8_0 = fp16 scale + 32×int8 = 34바이트/32가중치 = 8.5
+# - Q4_K_M, Q5_K_M: 일부 텐서를 더 높은 비트로 두는 혼합 방식이라 구조값(Q4_K 4.5, Q5_K 5.5)보다 크다.
+#     공식 Qwen3-4B/8B/14B/32B-GGUF 파일 크기 × 8 ÷ 파라미터 수로 실측 (scripts/measure_bpw.py, 2026-10-21)
+#     Q4_K_M 4.826~4.967, Q5_K_M 5.669~5.747 -> "올라가는가" 판정은 보수적이어야 하므로 최댓값을 쓴다
+#     (같은 측정에서 Q6_K 6.564~6.576, Q8_0 8.502~8.513으로 구조값과 일치해 측정 방법을 검증)
+# - FP16: 가중치당 2바이트
 quantization:
-  Q4_K_M: 4.5
-  Q5_K_M: 5.5
+  Q4_K_M: 4.97
+  Q5_K_M: 5.75
   Q6_K: 6.5625
   Q8_0: 8.5
   FP16: 16

@@ -44,6 +44,7 @@ def main() -> int:
         print("  [제외]", titles[i])
     print("  이유:", r.selection_reason)
     print("  [강제 포함]", r.forced)
+    print(f"  [코드 필터로 제외: 다른 모델 저장소 {len(r.filtered)}건]", r.filtered[:6])
     print("\n== 색인 ==")
     for d in r.fetched:
         print(f"  {d.source_type:10s} {d.title} | {d.source_url} | 본문 {len(d.text):,}자")
