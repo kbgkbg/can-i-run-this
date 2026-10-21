@@ -48,11 +48,18 @@ class FitReport:
     notes: list[str] = field(default_factory=list)
 
     def best(self) -> QuantFit | None:
-        """GPU에 전부 올라가는 것 중 가장 정밀한 양자화, 없으면 실행 가능한 것 중 가장 정밀한 것."""
-        for verdict in (GPU_FULL, OFFLOAD, CPU_ONLY):
+        """추천 양자화. GPU에 전부 올라가는 것이 있으면 그중 가장 정밀한 것.
+
+        없으면(오프로딩·CPU만) 가장 낮은 bpw를 고른다. 이때는 가중치가 작을수록 GPU에 더 많이 올라가고
+        RAM에서 읽는 양이 줄어 훨씬 빠르다 (예: Qwen3-8B, RTX 3080, 컨텍스트 32k에서 FP16 약 3 tok/s, Q4_K_M 수십 tok/s).
+        """
+        full = [r for r in self.rows if r.verdict == GPU_FULL]
+        if full:
+            return max(full, key=lambda r: r.bpw)
+        for verdict in (OFFLOAD, CPU_ONLY):
             fits = [r for r in self.rows if r.verdict == verdict]
             if fits:
-                return max(fits, key=lambda r: r.bpw)
+                return min(fits, key=lambda r: r.bpw)
         return None
 
 
