@@ -2,7 +2,7 @@
 
 1. 검색어 추출: 모델 메타데이터 + 질문 -> JSON 배열
 2. 후보 선별: 후보의 제목·요약만 보고 색인할 문서를 고른다 -> {"selected": [...], "reason": "..."}
-3. 답변 생성: 주어진 근거만 사용, [근거 n] 표기 (Phase 4)
+3. 답변 생성: 주어진 근거만 사용, [근거 n] 표기, 근거가 없으면 "제공된 문서에서 확인되지 않습니다"
 """
 from __future__ import annotations
 
@@ -78,4 +78,39 @@ def candidate_selection_messages(
     return [
         SystemMessage(CANDIDATE_SELECTION_SYSTEM.format(max_selected=max_selected)),
         HumanMessage(CANDIDATE_SELECTION_USER.format(model_id=model_id, question=question, candidates=lines)),
+    ]
+
+
+# ---------------------------------------------------------------- 프롬프트 3
+NOT_FOUND = "제공된 문서에서 확인되지 않습니다"
+
+ANSWER_SYSTEM = f"""너는 로컬 LLM 배포 전문가다. 사용자가 고른 모델을 자기 PC에서 돌리는 것에 대한 질문에 답한다.
+
+반드시 지킬 것
+- 아래 [근거]와 [계산값]에 있는 내용만 사용한다. 너의 사전 지식으로 수치나 사실을 보태지 않는다.
+- 근거에서 가져온 주장마다 문장 끝에 출처 번호를 [근거 n] 형식으로 붙인다. 여러 개면 [근거 1][근거 3]처럼 쓴다.
+- [계산값]을 쓸 때는 "(계산값)"이라고 표시한다. 계산값은 서비스가 공식으로 낸 추정치이며 근거 문서가 아니다.
+- 질문에 답할 내용이 근거에 없으면 추측하지 말고 "{NOT_FOUND}"라고 분명히 쓴다.
+  일부만 확인되면 확인된 부분만 답하고, 나머지는 무엇이 확인되지 않는지 적는다.
+- 근거끼리 내용이 다르면 둘 다 출처와 함께 제시한다.
+- 라이선스 질문에는 답 끝에 "법률 자문이 아니며, 정확한 조건은 원문 라이선스를 확인하세요."를 붙인다.
+- 한국어로, 핵심부터 간결하게 답한다."""
+
+ANSWER_USER = """[선택한 모델] {model_id}
+
+[근거]
+{evidence}
+
+[계산값]
+{calc}
+
+[질문]
+{question}"""
+
+
+def answer_messages(model_id: str, question: str, evidence_block: str, calc_block: str) -> list[BaseMessage]:
+    return [
+        SystemMessage(ANSWER_SYSTEM),
+        HumanMessage(ANSWER_USER.format(model_id=model_id, evidence=evidence_block,
+                                        calc=calc_block or "없음", question=question)),
     ]
