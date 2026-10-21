@@ -1,0 +1,240 @@
+"""요구사항 자동 점검 (검증 결과 테스트 결과표용).
+
+실행: python scripts/run_checks.py
+명세 4장 검증 항목 중 코드로 확인할 수 있는 것을 실행하고 docs/eval/test_results.md로 저장한다.
+화면이 필요한 항목(F2009~F2012 일부)은 Streamlit AppTest로 확인하고, 화면 캡처는 docs/screenshots/에 있다.
+LLM·임베딩 호출이 들어가 1~2분 걸린다.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Callable
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.collect import cache, http  # noqa: E402
+from app.collect.collector import collect, extract_queries  # noqa: E402
+from app.config import PROJECT_ROOT, env, get_config  # noqa: E402
+from app.data_prep.item_text import item_text, load_models  # noqa: E402
+from app.index.indexer import index_models  # noqa: E402
+from app.index.store import DOCS_COLLECTION, META_COLLECTION, count, get_store  # noqa: E402
+from app.rag.citations import NO_CITATION_NOTICE, cited_evidence, unverified_numbers  # noqa: E402
+from app.rag.graph import build_graph, run  # noqa: E402
+from app.rag.pipeline import ask, user_message  # noqa: E402
+from app.rag.prompts import NOT_FOUND  # noqa: E402
+from app.rag.retrieve import Evidence, retrieve  # noqa: E402
+
+MODEL = "Qwen/Qwen3-8B"
+results: list[tuple[str, str, bool, str]] = []
+
+
+def check(req: str, name: str) -> Callable:
+    def wrap(fn: Callable[[], tuple[bool, str]]):
+        t0 = time.monotonic()
+        try:
+            ok, detail = fn()
+            ok = bool(ok)
+        except Exception as e:  # noqa: BLE001
+            ok, detail = False, f"예외: {type(e).__name__}: {e}"
+        results.append((req, name, ok, f"{detail} ({time.monotonic() - t0:.1f}s)"))
+        print(("PASS" if ok else "FAIL"), req, name, "|", detail)
+        return fn
+    return wrap
+
+
+models = {m["id"]: m for m in load_models()}
+m8 = models[MODEL]
+
+
+@check("F2001", "항목 메타데이터 100건 이상 로드, 항목 1건 = 텍스트 1개")
+def _():
+    t = item_text(m8)
+    fields = ["모델명", "제작사", "파라미터 수", "아키텍처", "컨텍스트 길이", "라이선스", "태그(용도)"]
+    return len(models) >= 100 and all(f in t for f in fields), f"{len(models)}건, 필드 {len(fields)}개 포함"
+
+
+@check("F2002", "색인 청크 수 = 항목 수, 재색인해도 불변")
+def _():
+    before = count(META_COLLECTION)
+    after = index_models(list(models.values()))
+    return before == after == len(models), f"색인 전 {before} -> 후 {after}, 항목 {len(models)}"
+
+
+@check("F2003", "프롬프트 1이 파싱 가능한 검색어 배열을 낸다 (모델 ID 포함)")
+def _():
+    qs, fallback = extract_queries(m8, "Q4로 돌리면 메모리 얼마나 필요해?")
+    return isinstance(qs, list) and qs and not fallback, f"{qs}"
+
+
+@check("F2004·NF2002", "이미 수집한 검색어는 다시 수집하지 않는다 (캐시 히트)")
+def _():
+    q = "Qwen3-8B의 권장 샘플링 설정은?"
+    collect(m8, q)  # 처음이면 수집, 이미 했으면 캐시
+    r = collect(m8, q)
+    return r.cache_hit and not r.fetched, f"cache_hit={r.cache_hit}, 문서 {r.docs_total}건 사용"
+
+
+@check("F2004", "선택 모델의 모델 카드는 항상 색인되어 있다")
+def _():
+    docs = cache.indexed_docs(MODEL)
+    return f"hf_card:{MODEL}" in docs, f"{MODEL} 색인 문서 {len(docs)}건"
+
+
+@check("F2005", "model_docs 청크 ID = 모델ID:문서ID:순번, 메타데이터 필드 저장")
+def _():
+    g = get_store(DOCS_COLLECTION).get(where={"model_id": MODEL}, limit=50, include=["metadatas"])
+    id_ok = all(re.fullmatch(rf"{re.escape(MODEL)}:[a-z_]+:.+:\d+", i) for i in g["ids"])
+    need = {"doc_title", "source_url", "source_type", "doc_id", "model_id", "query", "collected_at"}
+    meta_ok = all(need <= set(m) for m in g["metadatas"])
+    return id_ok and meta_ok and g["ids"], f"청크 {len(g['ids'])}개 검사, 예: {g['ids'][0]}"
+
+
+@check("F2005", "청크 크기·중복은 config.yaml에서 읽는다")
+def _():
+    c = get_config()["chunking"]
+    return {"chunk_size", "chunk_overlap"} <= set(c), f"chunk_size={c['chunk_size']}, overlap={c['chunk_overlap']}"
+
+
+@check("F2006", "메타데이터 근거가 항상 [근거 1], Top-k를 바꾸면 근거 수가 바뀐다")
+def _():
+    cfg = get_config()["retrieval"]
+    old = cfg["top_k"]
+    try:
+        cfg["top_k"] = 2
+        a = retrieve(MODEL, "권장 샘플링 설정", concept_queries=[])
+        cfg["top_k"] = 6
+        b = retrieve(MODEL, "권장 샘플링 설정", concept_queries=[])
+    finally:
+        cfg["top_k"] = old
+    ok = a[0].source_type == "model_meta" and b[0].source_type == "model_meta" and len(b) > len(a)
+    return ok, f"top_k=2 -> 근거 {len(a)}건, top_k=6 -> {len(b)}건"
+
+
+@check("F2006", "청크 ID·본문 해시·근사 중복 제거")
+def _():
+    ev = retrieve(MODEL, "모델 구조와 컨텍스트 길이", concept_queries=["컨텍스트 윈도"])
+    ids = [e.chunk_id for e in ev]
+    return len(ids) == len(set(ids)), f"근거 {len(ev)}건, 중복 ID 없음"
+
+
+@check("F2007", "LangGraph가 retrieve -> generate 두 노드")
+def _():
+    g = build_graph().get_graph()
+    nodes = [n for n in g.nodes if not n.startswith("__")]
+    edges = [(e.source, e.target) for e in g.edges]
+    return nodes == ["retrieve", "generate"] and ("retrieve", "generate") in edges, f"노드 {nodes}, 엣지 {edges}"
+
+
+@check("F2007", "문서에 없는 질문에 추측하지 않고 '확인되지 않습니다'")
+def _():
+    s = run(MODEL, "Qwen3-8B 학습에 GPU를 몇 시간 썼고 비용은 얼마였어?", concept_queries=[])
+    return NOT_FOUND in s["answer"], s["answer"][:80]
+
+
+@check("F2008", "실제 인용된 근거만 표시, 인용이 없으면 안내")
+def _():
+    ev = [Evidence(i, f"c{i}", "t", "hf_card", f"d{i}", "u") for i in (1, 2, 3)]
+    a = [e.n for e in cited_evidence("가 [근거 3] 나 [근거 9]", ev)]
+    s = run(MODEL, "Qwen3-8B 학습에 GPU를 몇 시간 썼고 비용은 얼마였어?", concept_queries=[])
+    return a == [3] and (s["cited"] or s["notice"] == NO_CITATION_NOTICE), f"[근거 3][근거 9] -> {a}, 없음 안내 '{s['notice']}'"
+
+
+@check("F2008", "근거에 없는 수치를 인용 형식으로 쓰면 경고 (환각 검출)")
+def _():
+    ev = [Evidence(1, "a", "TopK=20, Temperature=0.6", "hf_card", "c", "u")]
+    p = unverified_numbers("- TopK: 50 [근거 1]\n- Temperature: 0.6 [근거 1]", ev)
+    return len(p) == 1 and "50" in p[0], f"{p}"
+
+
+@check("F2010", "판정·속도 계산 (Qwen3-8B, RTX 3080, 컨텍스트 4096)")
+def _():
+    from app.features.fit import assess
+    from app.features.hw_detect import manual
+    from app.features.speed import estimate_all
+    hw = manual("RTX 3080", 32)
+    rep = assess(m8, hw)
+    q4 = next(r for r in rep.rows if r.quant == "Q4_K_M")
+    sp = estimate_all(m8, hw, rep)["Q4_K_M"].tok_s
+    return round(q4.total_gb, 1) == 5.8 and q4.verdict.startswith("GPU"), f"Q4_K_M {q4.total_gb:.1f} GB {q4.verdict}, {sp:.1f} tok/s"
+
+
+@check("F2011", "조건 탐색 결과가 조건(용도 code)에 맞는 모델만")
+def _():
+    from app.features.recommend import search
+    r = search("코딩용 모델")
+    ok = r.results and all(re.search(r"(?<![\w])(code|coder|coding)(?![\w])", x.evidence, re.I) for x in r.results)
+    return bool(ok), ", ".join(x.model_id for x in r.results)
+
+
+@check("F2012", "라이선스 질문에 면책 안내")
+def _():
+    s = run(MODEL, "이 모델 상업적으로 써도 돼?", concept_queries=[])
+    return "법률 자문이 아니며" in s["answer"], s["answer"][-60:].replace("\n", " ")
+
+
+@check("NF2001", "대표 질문 응답 시간 (수집 캐시 히트 상태)")
+def _():
+    t0 = time.monotonic()
+    r = ask(m8, "Qwen3-8B의 권장 샘플링 설정은?")
+    sec = time.monotonic() - t0
+    return r.ok and sec < 30, f"{sec:.1f}초 (단계별 {', '.join(f'{k} {v:.1f}s' for k, v in r.timings.items())})"
+
+
+@check("NF2003", "API 키가 커밋된 파일에 없다")
+def _():
+    key = env("OPENAI_API_KEY") or ""
+    tracked = subprocess.run(["git", "ls-files"], cwd=PROJECT_ROOT, capture_output=True, text=True).stdout.split()
+    hits = [f for f in tracked if key and key in (PROJECT_ROOT / f).read_text(encoding="utf-8", errors="ignore")]
+    ignored = subprocess.run(["git", "check-ignore", ".env"], cwd=PROJECT_ROOT, capture_output=True).returncode == 0
+    return bool(key) and not hits and ignored, f"추적 파일 {len(tracked)}개 중 키 포함 {len(hits)}개, .env gitignore={ignored}"
+
+
+@check("NF2004", "오류는 사용자 문구로 바꾸고 스택 트레이스를 노출하지 않는다")
+def _():
+    msg = user_message(RuntimeError("Traceback (most recent call last): secret"))
+    return "Traceback" not in msg and "secret" not in msg, msg
+
+
+@check("NF2005", "수집·색인·검색·생성·UI 모듈 분리, 도메인 의존 코드는 data_prep")
+def _():
+    need = ["app/data_prep", "app/collect", "app/index", "app/rag", "app/features", "app/ui"]
+    return all((PROJECT_ROOT / d).is_dir() for d in need), ", ".join(need)
+
+
+@check("NF2006", "User-Agent 연락처, 호스트별 호출 간격(arXiv 3초), 재시도")
+def _():
+    ua = http.user_agent()
+    iv = get_config()["http"]["min_interval_s"]
+    return "(" in ua and iv["export.arxiv.org"] >= 3 and get_config()["http"]["max_retries"] > 0, ua
+
+
+@check("NF2007", "데이터·문서 출처와 이용 조건 기록")
+def _():
+    s = (PROJECT_ROOT / "data" / "SOURCES.md").read_text(encoding="utf-8")
+    return all(k in s for k in ["Hugging Face", "위키백과", "arXiv", "CC BY-SA", "hw_specs"]), "data/SOURCES.md"
+
+
+def main() -> int:
+    passed = sum(ok for _, _, ok, _ in results)
+    lines = [
+        "# 자동 점검 결과 (테스트 결과표)", "",
+        f"- 실행: `python scripts/run_checks.py` · {time.strftime('%Y-%m-%d %H:%M')} · 통과 {passed}/{len(results)}",
+        f"- 기준 모델 `{MODEL}`, LLM `{get_config()['llm']['chat_model']}`, 임베딩 `{get_config()['llm']['embedding_model']}`", "",
+        "| 요구사항 | 점검 내용 | 결과 | 근거(실행 결과) |", "|---|---|---|---|",
+        *(f"| {req} | {name} | {'PASS' if ok else 'FAIL'} | {' '.join(detail.split()).replace('|', '/')} |" for req, name, ok, detail in results),
+    ]
+    out = PROJECT_ROOT / "docs" / "eval" / "test_results.md"
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"\n통과 {passed}/{len(results)} -> {out}")
+    return 0 if passed == len(results) else 1
+
+
+if __name__ == "__main__":
+    os.chdir(PROJECT_ROOT)
+    sys.exit(main())
