@@ -48,7 +48,7 @@ def env(name: str) -> str | None:
 
 def missing_required_env() -> list[str]:
     """실행에 필요한데 비어 있는 환경변수 이름 목록 (F2012 키 누락 안내용)."""
-    required = ("OPENAI_API_KEY", "OPENAI_BASE_URL", "CONTACT_EMAIL")
+    required = ("OPENAI_API_KEY", "OPENAI_BASE_URL", "CONTACT_INFO")
     return [name for name in required if env(name) is None]
 
 
@@ -58,7 +58,7 @@ def describe() -> dict[str, Any]:
         "config": get_config(),
         "env": {
             name: ("설정됨" if env(name) else "없음")
-            for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "HF_TOKEN", "CONTACT_EMAIL")
+            for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "HF_TOKEN", "CONTACT_INFO")
         },
     }
 

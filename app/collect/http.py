@@ -35,7 +35,7 @@ _lock = threading.Lock()
 
 def user_agent() -> str:
     cfg = get_config()["project"]
-    contact = env("CONTACT_EMAIL") or "contact-not-set"
+    contact = env("CONTACT_INFO") or "contact-not-set"
     return f"{cfg['name']}/{cfg['version']} (SSAFY AI core project; {contact}) python-requests"
 
 
