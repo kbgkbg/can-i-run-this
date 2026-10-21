@@ -36,6 +36,18 @@ def _strip_html(s: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", s))
 
 
+# explaintext는 수식(MathML)을 한 글자씩 줄바꿈한 덩어리로 내보낸다. 이런 줄이 4개 이상 이어지면 수식으로 보고 지운다.
+_MATH_RUN = re.compile(r"(?:\n[ \t]*\S{0,3}[ \t]*){4,}")
+
+
+def clean_extract(text: str) -> str:
+    text = _MATH_RUN.sub(" [수식] ", text)
+    text = re.sub(r"(?:\[수식\]\s*){2,}", "[수식] ", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def search(query: str, limit: int, langs: list[str]) -> list[Candidate]:
     """langs 순서대로 검색해 결과가 나온 첫 언어의 후보를 반환한다."""
     for lang in langs:
@@ -67,7 +79,7 @@ def fetch(candidate: Candidate) -> Document | None:
         "pageids": pageid, "format": "json", "formatversion": 2,
     }, headers=_headers())
     pages = data.get("query", {}).get("pages", [])
-    text = (pages[0].get("extract") or "").strip() if pages else ""
+    text = clean_extract(pages[0].get("extract") or "") if pages else ""
     if not text:
         return None
     return Document(

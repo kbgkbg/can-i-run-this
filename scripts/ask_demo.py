@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.collect.collector import collect  # noqa: E402
+from app.collect.collector import collect, extract_queries, route  # noqa: E402
 from app.config import get_config  # noqa: E402
 from app.data_prep.item_text import load_models  # noqa: E402
 from app.rag.citations import invalid_citations  # noqa: E402
@@ -40,11 +40,17 @@ def main() -> int:
         return 1
 
     t0 = time.monotonic()
-    if not a.no_collect:
+    if a.no_collect:
+        queries, _ = extract_queries(model, a.question)
+        concept = [q for q in queries if route(q, model) == "wiki"]
+        print(f"[수집 생략] 검색어 {queries} | 개념 검색어 {concept}")
+    else:
         r = collect(model, a.question)
-        print(f"[수집] 검색어 {r.queries} | " + (f"이미 수집된 문서 {r.docs_total}건 사용" if r.cache_hit else f"새 문서 {len(r.fetched)}건"))
+        concept = r.concept_queries
+        print(f"[수집] 검색어 {r.queries} | 개념 검색어 {concept} | "
+              + (f"이미 수집된 문서 {r.docs_total}건 사용" if r.cache_hit else f"새 문서 {len(r.fetched)}건"))
     t1 = time.monotonic()
-    state = run(a.model_id, a.question)
+    state = run(a.model_id, a.question, concept_queries=concept)
     t2 = time.monotonic()
 
     print(f"\n== 근거 목록 (top_k={cfg['top_k']}, concept_top_k={cfg['concept_top_k']}, {cfg['search_type']}) ==")

@@ -30,6 +30,7 @@ StepCallback = Callable[[str, str], None]
 @dataclass
 class CollectResult:
     queries: list[str] = field(default_factory=list)
+    concept_queries: list[str] = field(default_factory=list)    # 위키백과로 라우팅된 개념 검색어 (검색 단계에서도 사용)
     new_queries: list[str] = field(default_factory=list)        # 캐시에 없어 실제로 수집한 검색어
     query_fallback: bool = False                                 # 프롬프트 1 실패로 기본 검색어를 썼는지
     candidates: list[Candidate] = field(default_factory=list)
@@ -157,6 +158,7 @@ def collect(model: dict[str, Any], question: str, on_step: StepCallback = _noop)
 
     on_step("검색어 추출", "질문에서 외부 문서 검색어를 뽑는 중")
     result.queries, result.query_fallback = extract_queries(model, question)
+    result.concept_queries = [q for q in result.queries if route(q, model) == "wiki"]
     result.new_queries = [q for q in result.queries if cache.normalize_query(q) not in entry["queries"]]
     need_card = own_card.doc_id not in entry["docs"] and not entry.get("no_card")
 

@@ -19,6 +19,7 @@ class RAGState(TypedDict, total=False):
     model_id: str
     question: str
     calc: str                 # 하드웨어 판정·속도 추정 결과 (계산값). 없으면 빈 문자열
+    concept_queries: list[str] | None  # 프롬프트 1의 개념 검색어 ([]면 개념 문서 검색 안 함, None이면 질문으로 검색)
     evidence: list[Evidence]
     answer: str
     cited: list[Evidence]     # 답변에 실제로 인용된 근거
@@ -30,7 +31,7 @@ def evidence_block(evidence: list[Evidence]) -> str:
 
 
 def retrieve_node(state: RAGState) -> dict[str, Any]:
-    return {"evidence": retrieve(state["model_id"], state["question"])}
+    return {"evidence": retrieve(state["model_id"], state["question"], state.get("concept_queries"))}
 
 
 def generate_node(state: RAGState) -> dict[str, Any]:
@@ -51,8 +52,9 @@ def build_graph():
     return g.compile()
 
 
-def run(model_id: str, question: str, calc: str = "") -> RAGState:
-    return build_graph().invoke({"model_id": model_id, "question": question, "calc": calc})
+def run(model_id: str, question: str, calc: str = "", concept_queries: list[str] | None = None) -> RAGState:
+    return build_graph().invoke({"model_id": model_id, "question": question, "calc": calc,
+                                 "concept_queries": concept_queries})
 
 
 def print_graph() -> str:
