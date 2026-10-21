@@ -143,15 +143,17 @@ def detect() -> Hardware:
     return hw
 
 
-def manual(spec_name: str | None, ram_gb: float) -> Hardware:
-    """수동 입력: 사양표에서 고른 GPU(없으면 CPU만) + RAM."""
+def manual(spec_name: str | None, ram_gb: float, apple_gpu_ratio: float | None = None) -> Hardware:
+    """수동 입력: 사양표에서 고른 GPU·칩(없으면 CPU만) + RAM. Mac은 GPU에 쓸 통합 메모리 비율을 바꿀 수 있다."""
     cfg = get_config()["hardware"]
+    ratio = apple_gpu_ratio or cfg["apple_gpu_mem_ratio"]
     base = dict(cpu_name=_cpu_name(), cpu_cores=psutil.cpu_count(logical=False), ram_gb=float(ram_gb), method="manual")
     spec = by_name(spec_name) if spec_name else None
     if spec is None:
         return Hardware(kind="cpu", **base)
     if spec.type == "apple":
-        hw = Hardware(kind="apple", gpu_name=spec.name, gpu_mem_gb=round(ram_gb * cfg["apple_gpu_mem_ratio"], 1), **base)
+        hw = Hardware(kind="apple", gpu_name=spec.name, gpu_mem_gb=round(ram_gb * ratio, 1), **base)
+        hw.notes.append(f"통합 메모리: GPU 사용 가능량을 RAM × {ratio:g}로 계산했습니다.")
     else:
         hw = Hardware(kind=spec.type, gpu_name=spec.name, vram_gb=spec.vram_gb, gpu_mem_gb=spec.vram_gb or 0.0, **base)
     return _apply_spec(hw, spec)

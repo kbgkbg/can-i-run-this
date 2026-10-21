@@ -191,3 +191,17 @@ def calc_text(model: dict[str, Any], hw: Hardware, report: FitReport, speeds: di
     lines += [f"대안: {a}" for a in report.alternatives]
     lines += report.notes
     return "\n".join(lines)
+
+
+CONTEXT_STEPS = (2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144)
+
+
+def context_sweep(model: dict[str, Any], hw: Hardware, quant: str) -> list[tuple[int, QuantFit]]:
+    """한 양자화에 대해 컨텍스트 길이별 판정 (모델 최대 컨텍스트까지). 컨텍스트가 늘면 KV 캐시가 비례해 커진다."""
+    max_ctx = model.get("max_context") or CONTEXT_STEPS[-1]
+    steps = [c for c in CONTEXT_STEPS if c < max_ctx] + [max_ctx]
+    out = []
+    for ctx in steps:
+        row = next(r for r in assess(model, hw, ctx).rows if r.quant == quant)
+        out.append((ctx, row))
+    return out

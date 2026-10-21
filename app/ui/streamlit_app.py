@@ -22,11 +22,11 @@ from app.config import get_config, missing_required_env  # noqa: E402
 from app.data_prep.hw_tables import load_specs  # noqa: E402
 from app.data_prep.item_text import format_params, load_models  # noqa: E402
 from app.features import hw_detect  # noqa: E402
-from app.features.fit import FitReport, assess, calc_text  # noqa: E402
+from app.features.fit import FitReport, assess, calc_text, context_sweep, max_context_on_gpu  # noqa: E402
 from app.features.hw_detect import Hardware  # noqa: E402
 from app.features import consult, persona  # noqa: E402
 from app.features.recommend import Recommendation, search as recommend_search  # noqa: E402
-from app.features.speed import SpeedEstimate, estimate_all  # noqa: E402
+from app.features.speed import SpeedEstimate, estimate, estimate_all  # noqa: E402
 from app.index.indexer import count_model_docs  # noqa: E402
 from app.index.store import META_COLLECTION, count  # noqa: E402
 from app.log import get_logger  # noqa: E402
@@ -35,7 +35,6 @@ from app.rag.pipeline import ask, user_message  # noqa: E402
 log = get_logger("ui")
 st.set_page_config(page_title="Can I run this model?", page_icon="🖥️", layout="wide")
 
-NO_GPU = "GPU 없음 (CPU만)"
 MODE_ASK, MODE_CONSULT = "모델에게 묻기", "추천 상담"
 VERDICT_ICON = {"GPU에 전부 올라감": "🟢", "일부 CPU 오프로딩 필요": "🟡", "CPU·RAM만으로 가능(느림)": "🟠", "불가": "🔴", "정보 부족": "⚪"}
 
@@ -79,26 +78,79 @@ def preflight() -> dict[str, dict] | None:
 
 
 # ------------------------------------------------------------------ 사이드바
+MAC_MEMORY_GB = [8, 16, 18, 24, 32, 36, 48, 64, 96, 128, 192]  # 선택지 (Mac 구성마다 고를 수 있는 값이 다르다)
+
+
+def _detect_hw() -> None:
+    try:
+        st.session_state["hw"] = hw_detect.detect().to_dict()
+    except Exception:  # noqa: BLE001
+        log.exception("하드웨어 감지 실패")
+        st.warning("하드웨어를 자동으로 감지하지 못했습니다. 아래에서 직접 고르세요.")
+
+
+def _bw_label(spec) -> str:
+    return f"{spec.bandwidth_gbps:g} GB/s" if spec.bandwidth_gbps else "대역폭 미확인"
+
+
+def spec_picker(prefix: str) -> None:
+    """내 PC 사양 선택. Mac 사용자가 많아 Apple Silicon을 별도 탭으로 둔다 (통합 메모리라 입력 방식이 다르다)."""
+    specs = load_specs()
+    default_ram = int(round(psutil.virtual_memory().total / 1024 ** 3))
+    mac, nv, cpu = st.tabs(["🍎 Mac (Apple Silicon)", "🟩 NVIDIA GPU", "💻 GPU 없음"])
+    with mac:
+        chips = [x for x in specs if x.type == "apple"]
+        chip = st.selectbox("칩", chips, key=f"{prefix}_mac_chip", format_func=lambda x: f"{x.name} · {_bw_label(x)}")
+        mem = st.selectbox("통합 메모리", MAC_MEMORY_GB, index=MAC_MEMORY_GB.index(16), key=f"{prefix}_mac_mem",
+                           format_func=lambda g: f"{g} GB")
+        ratio = st.slider("GPU가 쓸 수 있는 메모리 비율", 0.5, 0.9, float(get_config()["hardware"]["apple_gpu_mem_ratio"]),
+                          0.05, key=f"{prefix}_mac_ratio",
+                          help="통합 메모리 중 모델(GPU)에 쓸 수 있다고 보는 비율. 기본값은 가정값이며 나머지는 OS·앱 몫으로 둔다.")
+        st.caption(f"GPU 사용 가능 약 {mem * ratio:.1f} GB로 판정합니다.")
+        if st.button("Mac 사양 적용", key=f"{prefix}_mac_apply", width="stretch"):
+            st.session_state["hw"] = hw_detect.manual(chip.name, mem, ratio).to_dict()
+            st.rerun()
+    with nv:
+        gpus = [x for x in specs if x.type == "nvidia"]
+        gpu = st.selectbox("GPU", gpus, key=f"{prefix}_nv_gpu",
+                           format_func=lambda x: f"{x.name} · VRAM {x.vram_gb:g} GB · {_bw_label(x)}")
+        ram = st.number_input("시스템 RAM (GB)", 1, 2048, default_ram, key=f"{prefix}_nv_ram")
+        if st.button("NVIDIA 사양 적용", key=f"{prefix}_nv_apply", width="stretch"):
+            st.session_state["hw"] = hw_detect.manual(gpu.name, ram).to_dict()
+            st.rerun()
+    with cpu:
+        ram_c = st.number_input("시스템 RAM (GB)", 1, 2048, default_ram, key=f"{prefix}_cpu_ram")
+        st.caption("GPU 없이 CPU와 RAM만으로 돌리는 경우입니다. 속도는 시스템 RAM 대역폭(가정값)으로 추정합니다.")
+        if st.button("CPU만 사용으로 적용", key=f"{prefix}_cpu_apply", width="stretch"):
+            st.session_state["hw"] = hw_detect.manual(None, ram_c).to_dict()
+            st.rerun()
+
+
+def onboarding() -> None:
+    """첫 화면: 판정·추천이 모두 하드웨어에 달려 있어 먼저 내 PC 사양을 고르게 한다."""
+    with st.container(border=True):
+        st.subheader("🖥️ 먼저 내 PC 사양을 알려 주세요")
+        st.caption("실행 가능 판정, 속도 추정, 조건 탐색의 'GPU에서 돌아가는지'가 모두 이 사양으로 계산됩니다. 사이드바에서 언제든 바꿀 수 있습니다.")
+        c1, c2 = st.columns(2)
+        if c1.button("🔍 자동 감지 (NVIDIA·Apple Silicon)", key="onb_detect", width="stretch"):
+            _detect_hw()
+            st.rerun()
+        if c2.button("나중에 할게요", key="onb_skip", width="stretch"):
+            st.session_state["hw_skip"] = True
+            st.rerun()
+        spec_picker("onb")
+
+
 def hardware_panel() -> None:
     st.header("내 하드웨어")
     if st.button("하드웨어 감지", width="stretch"):
-        try:
-            st.session_state["hw"] = hw_detect.detect().to_dict()
-        except Exception:  # noqa: BLE001
-            log.exception("하드웨어 감지 실패")
-            st.warning("하드웨어를 자동으로 감지하지 못했습니다. 아래에서 직접 입력하세요.")
-
-    with st.expander("직접 입력"):
-        names = [NO_GPU] + [s.name for s in load_specs()]
-        gpu = st.selectbox("GPU / 칩", names, key="manual_gpu")
-        default_ram = round(psutil.virtual_memory().total / 1024 ** 3)
-        ram = st.number_input("RAM (GB)", min_value=1, max_value=2048, value=int(default_ram), key="manual_ram")
-        if st.button("적용", width="stretch"):
-            st.session_state["hw"] = hw_detect.manual(None if gpu == NO_GPU else gpu, ram).to_dict()
+        _detect_hw()
+    with st.expander("사양 선택 / 변경"):
+        spec_picker("side")
 
     hw = current_hw()
     if hw is None:
-        st.caption("하드웨어를 감지하거나 입력하면 실행 가능 판정이 표시됩니다.")
+        st.caption("하드웨어를 감지하거나 고르면 실행 가능 판정이 표시됩니다.")
         return
     if hw.kind == "apple":
         st.caption(f"**{hw.gpu_name}** · 통합 메모리 {hw.ram_gb:.0f} GB (GPU 사용 {hw.gpu_mem_gb:.1f} GB)")
@@ -259,6 +311,7 @@ def fit_card(m: dict, hw: Hardware) -> tuple[FitReport, dict[str, SpeedEstimate]
 
         for a in report.alternatives:
             st.caption(f"💡 {a}")
+        context_table(m, hw, report, speeds)
         with st.expander("판정 근거와 계산식"):
             st.markdown(
                 f"- 파라미터 수 {format_params(m.get('params'))}, 레이어 {m.get('num_layers') or '정보 없음'}, "
@@ -275,6 +328,29 @@ def fit_card(m: dict, hw: Hardware) -> tuple[FitReport, dict[str, SpeedEstimate]
             for n in report.notes:
                 st.caption(f"ℹ {n}")
     return report, speeds
+
+
+def context_table(m: dict, hw: Hardware, report: FitReport, speeds: dict[str, SpeedEstimate]) -> None:
+    """컨텍스트 길이를 늘리면 KV 캐시·필요 메모리·판정·속도가 얼마나 달라지는지 (모델 최대 컨텍스트까지)."""
+    if report.missing:
+        return
+    with st.expander("📏 컨텍스트 길이별 차이"):
+        quants = [r.quant for r in report.rows]
+        best = report.best()
+        q = st.selectbox("양자화", quants, index=quants.index(best.quant) if best else 0, key=f"ctx_quant::{m['id']}")
+        bpw = get_config()["quantization"][q]
+        rows = []
+        for ctx, row in context_sweep(m, hw, q):
+            sp = estimate(m, hw, row).tok_s
+            rows.append({"컨텍스트": f"{ctx:,}", "KV 캐시(GB)": round(row.kv_gb, 2), "필요 메모리(GB)": round(row.total_gb, 1),
+                         "판정": f"{VERDICT_ICON[row.verdict]} {row.verdict}",
+                         "추정 속도(tok/s)": None if sp is None else round(sp, 1)})
+        st.dataframe(rows, hide_index=True, width="stretch")
+        fit_max = max_context_on_gpu(m, bpw, hw)
+        if fit_max:
+            st.caption(f"{q}로 GPU에 전부 올리면서 쓸 수 있는 최대 컨텍스트: 약 {min(fit_max, m.get('max_context') or fit_max):,} 토큰 (계산값)")
+        st.caption("KV 캐시는 컨텍스트에 비례해 커지고, 디코딩 때 매 토큰 KV 캐시도 읽어서 길수록 느려진다. "
+                   "속도는 컨텍스트를 가득 채운 상태 기준(보수적)이며 추정치다.")
 
 
 def render_sources(msg: dict) -> None:
@@ -471,6 +547,8 @@ def main() -> None:
     if models is None:
         return
     m, docs_slot = sidebar(models)
+    if current_hw() is None and not st.session_state.get("hw_skip"):
+        onboarding()
     if st.session_state.get("mode") == MODE_CONSULT:
         consult_page()
         return
@@ -486,7 +564,7 @@ def main() -> None:
         report, speeds = fit_card(m, hw)
         calc = calc_text(m, hw, report, {q: s.tok_s for q, s in speeds.items()})
     else:
-        st.info("사이드바에서 하드웨어를 감지하거나 직접 입력하면 이 모델의 실행 가능 판정이 표시됩니다.")
+        st.info("위에서 내 PC 사양을 고르거나 사이드바에서 하드웨어를 감지하면 이 모델의 실행 가능 판정이 표시됩니다.")
 
     history = chats().setdefault(m["id"], [])  # 대화 기록은 모델별로 분리 (F2009)
     for msg in history:

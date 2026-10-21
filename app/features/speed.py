@@ -1,12 +1,14 @@
 """토큰 생성(디코딩) 속도 추정 (F2010 특화 기능).
 
-디코딩은 토큰 하나를 만들 때마다 가중치를 메모리에서 한 번씩 읽어야 해서 메모리 대역폭이 상한을 정한다.
-  tok/s ≈ 메모리 대역폭 × 효율 계수 ÷ 토큰당 읽는 가중치 크기
+디코딩은 토큰 하나를 만들 때마다 가중치와 지금까지의 KV 캐시를 메모리에서 읽어야 해서 메모리 대역폭이 상한을 정한다.
+  tok/s ≈ 메모리 대역폭 × 효율 계수 ÷ (토큰당 읽는 가중치 크기 + KV 캐시 크기)
+- KV 캐시는 판정에 쓴 컨텍스트를 가득 채운 상태로 본다 (긴 대화 끝 무렵, 보수적 추정).
+  가중치만 넣으면 컨텍스트를 늘려도 속도가 그대로라 "32k에서는 KV 4.5GB를 매 토큰 읽는다"는 차이가 빠졌다.
 - 효율 계수(speed_efficiency)는 가정값이며 실측으로 보정한다 (config.yaml).
 - 일부 CPU 오프로딩: 토큰당 시간 = GPU 몫 ÷ GPU 대역폭 + RAM 몫 ÷ 시스템 RAM 대역폭
 - MoE: 토큰당 활성 전문가만 읽으므로, 모델 이름의 "A3B" 같은 활성 파라미터 표기가 있으면 그 값을 쓴다.
   표기가 없으면 전체 파라미터로 계산해 "하한"으로 표시한다.
-프롬프트 처리(prefill) 속도와 KV 캐시 읽기는 넣지 않았다. 결과는 추정치다.
+프롬프트 처리(prefill) 속도는 넣지 않았다. 결과는 추정치다.
 """
 from __future__ import annotations
 
@@ -19,6 +21,7 @@ from app.features.fit import CPU_ONLY, GPU_FULL, OFFLOAD, FitReport, QuantFit
 from app.features.hw_detect import Hardware
 
 GB = 1e9  # 대역폭 GB/s는 10진 기준
+GIB = 1024 ** 3  # 메모리 크기(fit.py)는 2진 기준
 
 
 @dataclass
@@ -44,7 +47,8 @@ def estimate(model: dict[str, Any], hw: Hardware, row: QuantFit) -> SpeedEstimat
     if row.total_gb is None or row.verdict not in (GPU_FULL, OFFLOAD, CPU_ONLY):
         return SpeedEstimate(row.quant, None, "실행 불가 또는 정보 부족")
     params, basis = active_params(model)
-    bytes_per_token = params * row.bpw / 8
+    bytes_per_token = params * row.bpw / 8 + (row.kv_gb or 0) * GIB
+    basis = f"{basis} + KV 캐시(컨텍스트 가득 찬 상태)"
     eff = cfg["speed_efficiency"]
     ram_bw = cfg["system_ram_bandwidth_gbps"]
 

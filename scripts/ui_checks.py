@@ -45,8 +45,9 @@ if case in ("normal", "wrongkey"):
         out["messages_8b_back"] = len(at.chat_message)
 if case == "ctx":
     # 회귀: 컨텍스트를 32k로 올린 뒤 최대 4k 모델로 바꾸면 위젯 값이 최댓값을 넘어 예외가 났다
-    at.sidebar.selectbox(key="manual_gpu").select("RTX 3080").run()
-    next(b for b in at.sidebar.button if b.label == "적용").click().run()
+    from app.data_prep.hw_tables import by_name
+    at.sidebar.selectbox(key="side_nv_gpu").set_value(by_name("RTX 3080")).run()
+    at.sidebar.button(key="side_nv_apply").click().run()
     at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-8B").run()
     at.number_input(key="context::Qwen/Qwen3-8B").set_value(32768).run()
     at.sidebar.selectbox(key="model_id").select("utter-project/EuroLLM-1.7B-Instruct").run()
@@ -74,6 +75,20 @@ if case == "consult":
         last.button[0].click().run()
         out["mode_after"] = at.session_state["mode"]
         out["model_after"] = at.session_state["model_id"]
+    out["exception"] = len(at.exception)
+if case == "onboarding":
+    from app.data_prep.hw_tables import by_name
+    out["onb_shown"] = any("먼저 내 PC 사양" in h.value for h in at.subheader)
+    at.selectbox(key="onb_mac_chip").set_value(by_name("Apple M3 Max (40-core GPU)")).run()
+    at.selectbox(key="onb_mac_mem").set_value(36).run()
+    at.button(key="onb_mac_apply").click().run()
+    hw = at.session_state["hw"] or {}
+    out["hw"] = [hw.get("kind"), hw.get("spec_name"), hw.get("gpu_mem_gb"), hw.get("bandwidth_gbps")]
+    out["onb_after"] = any("먼저 내 PC 사양" in h.value for h in at.subheader)
+    at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-30B-A3B").run()
+    out["summary"] = [m.value for m in at.markdown if "(계산값)" in m.value and "**" in m.value][:1]
+    out["ctx_table"] = any("컨텍스트 길이별 차이" in e.label for e in at.expander)
+    out["ctx_rows"] = len(at.dataframe[1].value) if len(at.dataframe) > 1 else 0
     out["exception"] = len(at.exception)
 print("@@" + json.dumps(out, ensure_ascii=False))
 '''
@@ -117,6 +132,12 @@ def main() -> int:
                  cs.get("exception") == 0 and bool(cs.get("cards")) and cs.get("hw") == "RTX 3080"
                  and cs.get("mode_after") == "모델에게 묻기" and bool(cs.get("model_after")),
                  f"카드 {len(cs.get('cards', []))}개, 하드웨어 {cs.get('hw')}, 전환 후 {cs.get('mode_after')} / {cs.get('model_after')}"))
+    ob = run_case("onboarding")
+    rows.append(("F2010", "첫 화면 사양 선택(Mac 탭): M3 Max 40코어·36GB → 통합 메모리 판정, 컨텍스트별 차이 표",
+                 ob.get("exception") == 0 and ob.get("onb_shown") and not ob.get("onb_after")
+                 and ob.get("hw", [None])[0] == "apple" and ob.get("ctx_table") and ob.get("ctx_rows", 0) >= 3,
+                 f"첫 화면 {ob.get('onb_shown')} → 적용 후 {ob.get('onb_after')}, 하드웨어 {ob.get('hw')}, "
+                 f"판정 {str(ob.get('summary'))[:60]}, 컨텍스트 표 {ob.get('ctx_rows')}행"))
     passed = sum(ok for _, _, ok, _ in rows)
     lines = ["# 화면 기능 점검 결과 (Streamlit AppTest)", "",
              f"- 실행: `python scripts/ui_checks.py` · 통과 {passed}/{len(rows)}", "",

@@ -4,8 +4,8 @@
 
 | 증빙 | 내용 | 재현 명령 |
 |---|---|---|
-| [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 24항목 | `python scripts/run_checks.py` |
-| [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 9항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
+| [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 25항목 | `python scripts/run_checks.py` |
+| [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 10항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
 | [eval/mmr_comparison.md](eval/mmr_comparison.md) | 유사도 vs MMR 근거 비교 (F2014) | `python scripts/compare_mmr.py` |
 | [eval/rag_comparison.md](eval/rag_comparison.md) | RAG 사용 전후 답변 비교 (F2015) | `python scripts/compare_rag.py` |
 | [screenshots/](screenshots/) | 화면 캡처 10장 | Playwright로 실제 앱에서 촬영 |
@@ -25,6 +25,8 @@
 | F2009 | 항목 선택 및 질의응답 | `ui/streamlit_app.py` | 모델 전환 시 대화 분리 | 통과 | ui_test F2009 (2 → 0 → 2), p5_02 |
 | F2010 | 도메인 특화 기능 | `features/` | 판정·속도 계산 검산, 근거·계산값 구분 표시 | 통과 | test_results F2010, p6_01~03 |
 | F2010-5 | 모델 흉내 답변 (추가) | `features/persona.py` | 체급 구간, 연기 안내·바뀐 수치 표시 | 통과 | test_results F2010(체급), ui_test F2010(흉내), p10_02~03 |
+| F2010-6 | 컨텍스트 길이별 차이 (추가) | `fit.context_sweep`, UI | 컨텍스트 증가 시 KV·메모리 증가, 속도 감소 | 통과 | test_results F2010(컨텍스트), p11_02 |
+| F2010-7 | 첫 화면 사양 선택·Mac 분리 (추가) | `spec_picker`, `onboarding` | 첫 화면 표시, Mac 탭 적용 후 통합 메모리 판정 | 통과 | ui_test F2010(첫 화면), p11_01 |
 | F2011 | 조건 기반 항목 탐색 | `features/recommend.py` | 조건 불일치 모델 미포함, 카드 클릭 → 대화 | 통과 | test_results F2011, p7_01 |
 | F2011-2 | 추천 상담 (추가) | `features/consult.py` | 되묻기 1회 후 검색, 대화 속 하드웨어 적용, 카드 → 대화 | 통과 | ui_test F2011(상담), test_results F2011(GPU 이름), p10_01 |
 | F2012 | 진행 상태 및 안내 | UI, `pipeline.py` | 진행 상태, 색인 0건·키 누락 안내, 면책 | 통과 | ui_test F2012, test_results F2012, p5_04, p7_02 |
@@ -109,7 +111,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 
 ## 3. 테스트 결과표
 
-자동 점검 24항목과 화면 점검 9항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
+자동 점검 25항목과 화면 점검 10항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
 
 추가로 개발 중 수동 확인한 비정상·경계 상황:
 
@@ -136,7 +138,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 | `run_checks.py` (문서 캐시 없는 상태) | 22/22 |
 | `ui_checks.py` | 6/6 (이후 회귀 테스트 추가로 7/7) |
 | 오프라인 모드 (`collect.offline_mode: true`) | 묶음만으로 Qwen3-14B 모델 카드 강제 포함·색인, 인용 답변 |
-| 브라우저 전체 흐름 (Playwright) | 하드웨어 감지(GPU 없음 → CPU·RAM 판정) → 처음 묻는 모델의 라이선스 질문(LICENSE 원문 수집·인용·면책) → 조건 탐색 "한국어 되는 모델, 10B 이하" 카드 4개 → 카드 클릭으로 모델 전환 → 속도 체험(9.3 tok/s 재생). 화면에 트레이스백·키 노출 없음 |
+| 브라우저 전체 흐름 (Playwright) | 하드웨어 감지(GPU 없음 → CPU·RAM 판정) → 처음 묻는 모델의 라이선스 질문(LICENSE 원문 수집·인용·면책) → 조건 탐색 "한국어 되는 모델, 10B 이하" 카드 4개 → 카드 클릭으로 모델 전환 → 속도 체험(9.3 tok/s 재생, KV 읽기 반영 전 공식). 화면에 트레이스백·키 노출 없음 |
 
 **독립 검증에서 찾아 고친 버그**
 
@@ -144,7 +146,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 |---|---|---|---|
 | 컨텍스트를 32k로 올린 뒤 최대 4k 모델(EuroLLM)로 바꾸면 화면에 **트레이스백**(`StreamlitValueAboveMaxError`) — NF2004 위반 | AppTest로 재현 | 컨텍스트를 모델별 키로 두고 범위 안으로 제한, 모델별 값은 따로 보관해 돌아오면 복원 | `ui_checks.py` 회귀 항목 PASS (전환 후 4096, 복귀 후 32768, 예외 0) |
 | 질문으로 문서를 새로 수집해도 사이드바 "수집된 문서 0건"이 다음 조작 전까지 그대로 | 브라우저 캡처 | 사이드바가 질문 처리보다 먼저 그려지는 문제 → 자리만 잡고 처리 후 채움 | 질문 전 0건 → 같은 실행에서 3건 |
-| 오프로딩 상황(컨텍스트 32k)에서 요약 카드·속도 체험 기본값이 FP16(약 3 tok/s) | 브라우저 확인 | GPU에 전부 올라가는 것이 없으면 가장 낮은 bpw 추천 | Q4_K_M 10.2GB, 73.3 tok/s 추천 |
+| 오프로딩 상황(컨텍스트 32k)에서 요약 카드·속도 체험 기본값이 FP16(약 3 tok/s) | 브라우저 확인 | GPU에 전부 올라가는 것이 없으면 가장 낮은 bpw 추천 | Q4_K_M 10.2GB 추천 (당시 73.3 tok/s, KV 읽기 반영 후 37.6 tok/s) |
 | 예상 못 한 예외가 나면 Streamlit 기본 설정상 트레이스백이 보일 수 있음 | 위 버그로 확인 | 앱 전체를 감싸 사용자 문구만 표시 + `.streamlit/config.toml` `showErrorDetails = "none"` | `streamlit config show`에서 적용 확인 |
 
 ## 5. 화면 캡처 목록
@@ -164,6 +166,8 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 | p10_01_consult.png | 추천 상담 (되묻기 → 대화 속 하드웨어로 판정이 붙은 카드) |
 | p10_02_persona_streaming.png | 🎭 흉내 답변을 추정 속도로 재생 |
 | p10_03_persona_done.png | 흉내 답변 + 바뀐 수치 비교, 근거 답변의 수치 검증 경고 |
+| p11_01_onboarding_mac.png | 첫 화면 사양 선택 (Mac 탭: 칩·통합 메모리·GPU 비율) |
+| p11_02_context_table.png | 컨텍스트 길이별 차이 표 (M3 Max 40-core · 36GB, Qwen3-8B FP16: 2k 14.4 → 40k 10.7 tok/s) |
 
 ## 6. 상호 체크리스트 (옆 교육생 점검용)
 
@@ -186,6 +190,8 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 | 13 | 판정 카드에서 컨텍스트를 크게 올린 뒤 다른 모델로 바꿔도 오류가 나지 않는다 | | |
 | 14 | 🎭 흉내 답변이 근거 답변과 구분되고 "연기" 안내가 보인다. 작은 모델일수록 더 틀린다 | | |
 | 15 | 추천 상담에서 조건을 말하면 카드가 나오고, 카드를 누르면 그 모델 대화로 간다 | | |
+| 16 | 처음 열면 사양 선택 화면이 나오고, Mac 탭에서 칩·메모리를 고르면 판정이 통합 메모리 기준으로 나온다 | | |
+| 17 | 컨텍스트 길이별 차이 표에서 길수록 메모리는 늘고 속도는 줄어든다 | | |
 
 - 점검자: ____________ · 점검일: ____________
 
@@ -193,7 +199,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 
 | 항목 | 상태 |
 |---|---|
-| 필수 기능 F2001 ~ F2012가 모두 동작한다 | 완료 (자동 점검 24/24, 화면 점검 9/9) |
+| 필수 기능 F2001 ~ F2012가 모두 동작한다 | 완료 (자동 점검 25/25, 화면 점검 10/10) |
 | 선택한 심화 기능(F2014·F2015·F2016)이 동작하고 필수 기능 결과와 비교되어 있다 | 완료 (mmr_comparison, rag_comparison) |
 | 증명을 위한 스크린샷을 모두 첨부했다 | 완료 (10장). 본인 PC에서 "하드웨어 감지" 자동 감지 화면은 추가 촬영 필요 (개발 환경에 GPU 없음) |
 | 요구사항 정의서·RAG 설계문서·소스코드·README.md | 완료 |

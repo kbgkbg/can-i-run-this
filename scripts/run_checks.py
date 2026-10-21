@@ -172,6 +172,19 @@ def _():
     return bool(ok), ", ".join(x.model_id for x in r.results)
 
 
+@check("F2010", "컨텍스트가 길수록 KV 캐시·필요 메모리는 커지고 속도는 줄어든다 (KV 읽기 포함)")
+def _():
+    from app.features.fit import context_sweep
+    from app.features.hw_detect import manual
+    from app.features.speed import estimate
+    hw = manual("RTX 3080", 32)
+    sweep = context_sweep(m8, hw, "Q4_K_M")
+    kv = [r.kv_gb for _, r in sweep]
+    sp = [estimate(m8, hw, r).tok_s for _, r in sweep]
+    ok = all(a < b for a, b in zip(kv, kv[1:])) and all(a > b for a, b in zip(sp, sp[1:]))
+    return ok, " / ".join(f"{c // 1024}k: KV {r.kv_gb:.2f}GB {s:.0f}tok/s" for (c, r), s in zip(sweep, sp))
+
+
 @check("F2010", "흉내 답변 체급: 유효 파라미터로 구간 결정 (MoE는 sqrt(전체×활성))")
 def _():
     from app.features.persona import make_persona
