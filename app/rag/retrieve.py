@@ -5,7 +5,8 @@
 3. 개념 문서(위키백과)는 모델 필터 없이 따로 검색해 합친다. 다른 모델 질문 때 모아 둔 개념 문서도 쓰기 위해서다.
    - 프롬프트 1이 개념 검색어를 뽑았을 때만, 그 검색어로 검색한다.
      질문 전체 문장으로 찾으면 개념 질문이 아니어도 가장 가까운 위키 청크가 늘 끼어들었다.
-4. 중복 제거: 같은 청크 ID, 같은 본문 해시, 그리고 거의 같은 본문(단어 3-gram 자카드 유사도).
+4. 라이선스 질문이면 라이선스 원문 청크를 따로 검색해 넣는다.
+5. 중복 제거: 같은 청크 ID, 같은 본문 해시, 그리고 거의 같은 본문(단어 3-gram 자카드 유사도).
    공식 카드를 그대로 옮긴 GGUF·AWQ 카드처럼 헤더 한 줄만 다른 청크가 근거 자리를 차지하지 않게 한다.
    빠질 몫까지 top_k × overfetch개를 먼저 가져와 중복을 걸러낸 뒤 top_k개를 채운다.
 검색 방식(similarity | mmr)과 수치는 config.yaml retrieval 절에서 정한다.
@@ -111,8 +112,11 @@ def _take(hits: list[tuple[LCDocument, float | None]], k: int, dedup: _Deduper) 
     return taken
 
 
-def retrieve(model_id: str, question: str, concept_queries: list[str] | None = None) -> list[Evidence]:
-    """concept_queries: 프롬프트 1이 뽑은 개념 검색어. []면 개념 검색을 하지 않고, None(모름)이면 질문으로 검색한다."""
+def retrieve(model_id: str, question: str, concept_queries: list[str] | None = None,
+             license_question: bool = False) -> list[Evidence]:
+    """concept_queries: 프롬프트 1이 뽑은 개념 검색어. []면 개념 검색을 하지 않고, None(모름)이면 질문으로 검색한다.
+    license_question: 라이선스 질문이면 라이선스 원문 청크를 따로 license_top_k개 넣는다.
+    """
     cfg = get_config()["retrieval"]
     dedup = _Deduper(cfg["near_dup_threshold"])
     evidence: list[Evidence] = []
@@ -121,6 +125,11 @@ def retrieve(model_id: str, question: str, concept_queries: list[str] | None = N
     if meta:
         evidence.append(meta)
         dedup.accept(meta.chunk_id, meta.text)
+
+    if license_question and cfg["license_top_k"] > 0:
+        # 한국어 질문("상업적으로 써도 돼?")과 영어 원문은 거리가 멀어 일반 검색에 잘 안 걸린다
+        where = {"$and": [{"model_id": model_id}, {"source_type": "hf_license"}]}
+        evidence += _take(_search(question, where, cfg["license_top_k"] * cfg["overfetch"], cfg), cfg["license_top_k"], dedup)
 
     k = cfg["top_k"]
     evidence += _take(_search(question, {"model_id": model_id}, k * cfg["overfetch"], cfg), k, dedup)

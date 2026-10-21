@@ -19,6 +19,7 @@
 | 출처 | 수집 방법 | 원문 출처 표기 | 이용 조건 |
 |---|---|---|---|
 | Hugging Face 모델 카드 | `https://huggingface.co/{모델ID}/raw/main/README.md` (후보 검색: `/api/models?search=`) | 모델 페이지 URL | 모델 카드별 라이선스(각 저장소의 license 필드·LICENSE 파일)를 따른다. 원문 링크를 함께 표시 |
+| Hugging Face 라이선스 원문 (라이선스 질문일 때만) | `https://huggingface.co/{모델ID}/raw/main/{license_link 경로 또는 LICENSE, LICENSE.md, LICENSE.txt}` | 파일 URL | 라이선스 원문 자체. 답변에는 "법률 자문이 아니며, 정확한 조건은 원문 라이선스를 확인하세요." 안내를 붙인다 |
 | 위키백과 (한국어 우선, 없으면 영어) | MediaWiki API `list=search`, `prop=extracts&explaintext` | 문서 URL | CC BY-SA 4.0 — 출처(문서 URL)와 라이선스를 표시. User-Agent에 프로젝트명과 연락처 포함 |
 | arXiv PDF (Phase 8) | | PDF URL + 쪽 번호 | |
 

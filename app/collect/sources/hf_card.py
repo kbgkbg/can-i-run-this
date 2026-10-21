@@ -1,4 +1,9 @@
-"""Hugging Face 모델 카드 (주 출처). 원문 출처 = 모델 페이지 URL."""
+"""Hugging Face 모델 카드 (주 출처)와 라이선스 원문.
+
+- 모델 카드: 저장소의 README.md. 원문 출처 = 모델 페이지 URL
+- 라이선스 원문: 라이선스 질문일 때 저장소의 LICENSE 파일. 원문 출처 = 파일 URL
+  라이선스 이름(apache-2.0 등)만으로 조건을 말하면 근거 없는 사전 지식이 섞여서, 원문을 근거로 넣는다.
+"""
 from __future__ import annotations
 
 import re
@@ -86,3 +91,59 @@ def fetch(candidate: Candidate) -> Document | None:
         collected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         license=LICENSE_NOTE,
     )
+
+
+LICENSE_SOURCE_TYPE = "hf_license"
+_DEFAULT_LICENSE_FILES = ("LICENSE", "LICENSE.md", "LICENSE.txt")
+
+
+def license_doc_id(model_id: str) -> str:
+    return f"{LICENSE_SOURCE_TYPE}:{model_id}"
+
+
+def _license_files(model_id: str, license_link: str | None) -> list[str]:
+    """시도할 LICENSE 파일 경로. license_link가 같은 저장소의 파일이면 그것부터."""
+    files: list[str] = []
+    if license_link:
+        m = re.match(rf"https://huggingface\.co/{re.escape(model_id)}/(?:blob|resolve|raw)/main/(.+)$", license_link)
+        if m:
+            files.append(m.group(1))
+        elif not license_link.startswith("http"):
+            files.append(license_link.lstrip("./"))
+    return list(dict.fromkeys(files + list(_DEFAULT_LICENSE_FILES)))
+
+
+def license_candidate(model_id: str, license_link: str | None) -> Candidate:
+    return Candidate(
+        doc_id=license_doc_id(model_id),
+        source_type=LICENSE_SOURCE_TYPE,
+        title=f"{model_id} 라이선스 원문",
+        summary="선택한 모델 저장소의 LICENSE 파일",
+        url=f"{HF}/{model_id}",
+        query="라이선스",
+        extra={"model_id": model_id, "files": _license_files(model_id, license_link)},
+    )
+
+
+def fetch_license(candidate: Candidate) -> Document | None:
+    """LICENSE 파일을 순서대로 시도한다. 하나도 없으면 None, gated(401)면 ExternalAPIError."""
+    model_id = candidate.extra["model_id"]
+    for f in candidate.extra["files"]:
+        try:
+            text = http.get(f"{HF}/{model_id}/raw/main/{f}", headers=_headers()).text.strip()
+        except http.ExternalAPIError as e:
+            if "401" in str(e):
+                raise  # gated: 토큰 없이는 원문을 받을 수 없다
+            continue
+        if text:
+            return Document(
+                doc_id=candidate.doc_id,
+                source_type=LICENSE_SOURCE_TYPE,
+                title=candidate.title,
+                source_url=f"{HF}/{model_id}/blob/main/{f}",
+                text=text,
+                query=candidate.query,
+                collected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                license="라이선스 원문 자체",
+            )
+    return None

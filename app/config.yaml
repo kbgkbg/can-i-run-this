@@ -62,11 +62,17 @@ chunking:
 retrieval:
   top_k: 5                   # model_docs에서 가져올 청크 수 (메타데이터 1건은 별도로 항상 포함)
   concept_top_k: 2           # 위키백과 등 개념 문서(모델 필터 없음)에서 가져올 청크 수. 개념 검색어가 있을 때만 검색
+  license_top_k: 3          # 라이선스 질문이면 라이선스 원문에서 따로 가져올 청크 수 (한국어 질문과 영어 원문은 임베딩 거리가 멀다)
   overfetch: 3               # 중복 제거로 빠질 몫까지 top_k × overfetch개를 먼저 가져온다
   near_dup_threshold: 0.8    # 본문 단어 3-gram 자카드 유사도가 이 이상이면 같은 내용으로 보고 뒤의 것을 버린다
   search_type: similarity    # similarity | mmr
   mmr_fetch_k: 30
   mmr_lambda: 0.5
+
+# 조건 기반 모델 탐색 (F2011)
+recommend:
+  candidate_k: 30            # model_meta 의미 검색 후보 수 (언어 조건이 있으면 본문 필터 검색 결과를 더한다)
+  max_results: 6             # 카드로 보여 줄 최대 모델 수
 
 # 하드웨어 판정 / 속도 추정 (F2010)
 hardware:

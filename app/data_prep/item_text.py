@@ -72,6 +72,7 @@ def item_text(model: dict[str, Any]) -> str:
     # 글자 모양이 비슷한 빈 항목이 오히려 상위로 걸려서다.
     optional = [
         ("지원 언어", ", ".join(language_names(model))),
+        ("라이선스 원문", model.get("license_link") or ""),
         ("기반 모델", ", ".join(model.get("base_model") or [])),
         ("태그(용도)", ", ".join(usage_tags(model))),
     ]

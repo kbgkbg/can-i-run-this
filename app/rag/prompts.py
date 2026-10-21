@@ -87,6 +87,7 @@ def candidate_selection_messages(
 
 # ---------------------------------------------------------------- 프롬프트 3
 NOT_FOUND = "제공된 문서에서 확인되지 않습니다"
+LICENSE_DISCLAIMER = "법률 자문이 아니며, 정확한 조건은 원문 라이선스를 확인하세요."  # F2012 면책 안내
 
 ANSWER_SYSTEM = f"""너는 로컬 LLM 배포 전문가다. 사용자가 고른 모델을 자기 PC에서 돌리는 것에 대한 질문에 답한다.
 
@@ -101,7 +102,8 @@ ANSWER_SYSTEM = f"""너는 로컬 LLM 배포 전문가다. 사용자가 고른 �
 - 질문에 답할 내용이 근거에 없으면 추측하지 말고 "{NOT_FOUND}"라고 분명히 쓴다.
   일부만 확인되면 확인된 부분만 답하고, 나머지는 무엇이 확인되지 않는지 적는다.
 - 근거끼리 내용이 다르면 둘 다 출처와 함께 제시한다.
-- 라이선스 질문에는 답 끝에 "법률 자문이 아니며, 정확한 조건은 원문 라이선스를 확인하세요."를 붙인다.
+- 라이선스 질문에는 근거의 라이선스 이름과 원문 링크를 밝히고, 답 끝에 "{LICENSE_DISCLAIMER}"를 붙인다.
+  허용·금지·의무 같은 조건은 (라이선스 원문) 근거에 적힌 내용만 말한다. 라이선스 이름만 보고 조건을 추측하지 않는다.
 - 한국어로, 핵심부터 간결하게 답한다."""
 
 ANSWER_USER = """[선택한 모델] {model_id}
@@ -124,3 +126,52 @@ def answer_messages(model_id: str, question: str, evidence_block: str, calc_bloc
         HumanMessage(ANSWER_USER.format(model_id=model_id, evidence=evidence_block,
                                         calc=calc_block or "없음", question=question)),
     ]
+
+
+# ---------------------------------------------------------------- 조건 기반 모델 탐색 (F2011)
+# 프롬프트 1~3과 별도로, 탐색 기능은 조건 해석 -> 후보 선별 두 단계를 쓴다.
+CONDITION_PARSE_SYSTEM = """너는 로컬 LLM 추천 담당이다. 사용자가 원하는 모델 조건을 자연어로 말하면 검색용 조건으로 바꾼다.
+
+출력은 JSON 객체 하나만:
+{"query": "모델 메타데이터 검색에 쓸 짧은 한국어 문장",
+ "languages": ["ISO 639-1 코드", ...],      // 꼭 지원해야 하는 언어. 언급 없으면 []
+ "uses": ["용도", ...],                     // code, math, reasoning, chat, vision, tool-use 중에서만. 언급 없으면 []
+ "min_params_b": 숫자 또는 null,             // 파라미터 수 하한(십억 단위)
+ "max_params_b": 숫자 또는 null,             // 파라미터 수 상한(십억 단위)
+ "must_fit_gpu": true 또는 false}           // "내 VRAM 안에서", "내 PC에서 돌아가는" 같은 조건이 있으면 true
+예: "한국어 되는 코딩용, 10B 이하, 내 그래픽카드에서 돌아가는 거"
+-> {"query": "한국어를 지원하는 코딩용 모델", "languages": ["ko"], "uses": ["code"], "min_params_b": null,
+    "max_params_b": 10, "must_fit_gpu": true}"""
+
+CANDIDATE_MODEL_SELECT_SYSTEM = """너는 로컬 LLM 추천 담당이다. 후보 모델의 메타데이터만 보고 사용자 조건에 맞는 모델을 고른다.
+
+규칙
+- 메타데이터에 적힌 내용만 근거로 판단한다. 모델 이름이나 사전 지식으로 추측해 조건을 채우지 않는다.
+- 각 모델마다 조건을 만족한다는 근거를 메타데이터에서 한 줄 그대로 인용한다 (예: "태그(용도): code, conversational").
+- 조건을 확인할 수 없는 모델은 고르지 않는다. 맞는 모델이 없으면 빈 배열을 낸다.
+- 최대 {max_results}개, 조건에 더 잘 맞는 순서로.
+- 출력은 JSON 객체 하나만:
+{{"selected": [{{"id": "모델 ID", "reason": "조건과 어떻게 맞는지 한 문장", "evidence": "메타데이터에서 그대로 인용한 줄"}}]}}"""
+
+CANDIDATE_MODEL_SELECT_USER = """[사용자 조건]
+{condition}
+
+[해석한 조건]
+용도: {uses}
+
+[후보 모델 메타데이터]
+{candidates}"""
+
+
+def condition_parse_messages(condition: str) -> list[BaseMessage]:
+    return [SystemMessage(CONDITION_PARSE_SYSTEM), HumanMessage(condition)]
+
+
+def candidate_model_select_messages(condition: str, uses: list[str], candidates: str, max_results: int) -> list[BaseMessage]:
+    return [
+        SystemMessage(CANDIDATE_MODEL_SELECT_SYSTEM.format(max_results=max_results)),
+        HumanMessage(CANDIDATE_MODEL_SELECT_USER.format(condition=condition, uses=", ".join(uses) or "지정 없음",
+                                                        candidates=candidates)),
+    ]
+
+

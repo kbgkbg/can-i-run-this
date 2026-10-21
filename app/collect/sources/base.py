@@ -13,6 +13,7 @@ from typing import Any
 SOURCE_LABELS = {
     "model_meta": "모델 메타데이터",
     "hf_card": "HF 모델 카드",
+    "hf_license": "라이선스 원문",
     "wikipedia": "위키백과",
     "arxiv_pdf": "arXiv PDF",
 }
@@ -21,7 +22,7 @@ SOURCE_LABELS = {
 @dataclass
 class Candidate:
     doc_id: str          # 출처 안에서 고유한 문서 ID (예: hf_card:Qwen/Qwen3-8B, wikipedia:ko:12345)
-    source_type: str     # hf_card | wikipedia | arxiv_pdf
+    source_type: str     # hf_card | hf_license | wikipedia | arxiv_pdf
     title: str
     summary: str
     url: str

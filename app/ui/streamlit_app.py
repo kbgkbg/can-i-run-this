@@ -1,8 +1,8 @@
-"""Streamlit UI (F2009, F2010, F2012).
+"""Streamlit UI (F2009, F2010, F2011, F2012).
 
 실행: streamlit run app/ui/streamlit_app.py
-- 사이드바: 모델 선택, 하드웨어 감지/직접 입력, 색인 현황(메타데이터 건수, 선택 모델의 수집 문서)
-- 메인: 선택 모델 헤더 + 실행 가능 판정 카드 + 모델별로 분리된 대화 + 진행 상태 + 인용된 근거
+- 사이드바: 모델 선택, 조건으로 모델 찾기, 하드웨어 감지/직접 입력, 색인 현황(메타데이터 건수, 선택 모델의 수집 문서)
+- 메인: 조건 탐색 결과 카드 + 선택 모델 헤더 + 실행 가능 판정 카드 + 모델별로 분리된 대화 + 진행 상태 + 인용된 근거
 화면에는 안내 문구만 띄우고 프롬프트 전문·스택 트레이스는 보이지 않는다 (NF2004).
 """
 from __future__ import annotations
@@ -23,6 +23,7 @@ from app.data_prep.item_text import format_params, load_models  # noqa: E402
 from app.features import hw_detect  # noqa: E402
 from app.features.fit import FitReport, assess, calc_text  # noqa: E402
 from app.features.hw_detect import Hardware  # noqa: E402
+from app.features.recommend import search as recommend_search  # noqa: E402
 from app.features.speed import SpeedEstimate, estimate_all  # noqa: E402
 from app.index.indexer import count_model_docs  # noqa: E402
 from app.index.store import META_COLLECTION, count  # noqa: E402
@@ -118,6 +119,11 @@ def sidebar(models: dict[str, dict]) -> dict | None:
             format_func=lambda i: f"{i}  ·  {short_params(models[i].get('params'))}",
             placeholder="모델 이름을 입력해 검색하세요",
         )
+        with st.expander("🔎 조건으로 모델 찾기"):
+            st.text_area("원하는 조건", key="rec_query", height=80,
+                         placeholder="예: 한국어 되는 코딩용 모델, 내 그래픽카드에서 돌아가는 거")
+            if st.button("찾기", width="stretch") and st.session_state.get("rec_query", "").strip():
+                run_recommend(st.session_state["rec_query"].strip())
         st.divider()
         hardware_panel()
         st.divider()
@@ -131,6 +137,56 @@ def sidebar(models: dict[str, dict]) -> dict | None:
             if m.get("config_status") != "ok":
                 st.caption("⚠ 이 모델은 gated 저장소라 레이어 수 등 일부 메타데이터가 없습니다.")
         return models.get(model_id) if model_id else None
+
+
+# ------------------------------------------------------------------ 조건 기반 탐색 (F2011)
+def run_recommend(text: str) -> None:
+    with st.spinner("조건에 맞는 모델을 찾는 중..."):
+        try:
+            st.session_state["rec"] = {"query": text, "result": recommend_search(text, current_hw())}
+        except Exception:  # noqa: BLE001
+            log.exception("조건 탐색 실패")
+            st.session_state["rec"] = {"query": text, "error": "조건 탐색 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."}
+
+
+def _choose_model(model_id: str) -> None:
+    st.session_state["model_id"] = model_id  # 카드를 누르면 그 모델을 선택해 대화로 이어간다
+
+
+def recommend_cards() -> None:
+    rec = st.session_state.get("rec")
+    if not rec:
+        return
+    with st.expander(f"🔎 조건 탐색 결과: {rec['query']}", expanded=True):
+        if rec.get("error"):
+            st.warning(rec["error"])
+            return
+        r = rec["result"]
+        c = r.condition
+        st.caption(f"해석한 조건 — 언어: {', '.join(c.languages) or '무관'} · 용도: {', '.join(c.uses) or '무관'} · "
+                   f"파라미터: {c.min_params_b or '-'}~{c.max_params_b or '-'}B · GPU 적재 필수: {'예' if c.must_fit_gpu else '아니오'}"
+                   f" | 후보 {r.candidates}건 중 조건 불일치 {sum(r.excluded.values())}건 제외")
+        if not r.results:
+            st.info("조건을 모두 만족하는 모델을 찾지 못했습니다. 조건을 줄여 다시 찾아보세요.")
+        cols = st.columns(2)
+        for i, rec_item in enumerate(r.results):
+            with cols[i % 2].container(border=True):
+                st.markdown(f"**{md_escape(rec_item.model_id)}**")
+                if rec_item.quant:
+                    sp = f", 약 {rec_item.tok_s:.0f} tok/s" if rec_item.tok_s else ""
+                    st.caption(f"{VERDICT_ICON.get(rec_item.verdict, '')} {rec_item.quant}: {rec_item.verdict} "
+                               f"({rec_item.total_gb:.1f} GB{sp}, 계산값)")
+                elif rec_item.verdict:
+                    st.caption(f"{VERDICT_ICON.get(rec_item.verdict, '')} {rec_item.verdict}")
+                st.write(rec_item.reason)
+                if rec_item.evidence:
+                    st.caption(f"근거 (모델 메타데이터): “{md_escape(rec_item.evidence)}” · [원문]({rec_item.url})")
+                else:
+                    st.caption(f"근거 (모델 메타데이터): 언어·크기 표기 · [원문]({rec_item.url})")
+                st.button("이 모델로 대화", key=f"pick_{rec_item.model_id}", on_click=_choose_model,
+                          args=(rec_item.model_id,), width="stretch")
+        for n in r.notes:
+            st.caption(f"ℹ {n}")
 
 
 # ------------------------------------------------------------------ 메인
@@ -277,6 +333,7 @@ def main() -> None:
     if models is None:
         return
     m = sidebar(models)
+    recommend_cards()
     if m is None:
         st.info("왼쪽에서 질문할 모델을 선택하세요.")
         return

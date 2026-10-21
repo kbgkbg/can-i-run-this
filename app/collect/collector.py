@@ -19,6 +19,7 @@ from app.config import get_config
 from app.data_prep.item_text import item_text
 from app.index.indexer import index_document
 from app.log import get_logger
+from app.rag.intent import is_license_question
 from app.rag.llm import invoke_json
 from app.rag.prompts import candidate_selection_messages, query_extraction_messages
 
@@ -38,7 +39,7 @@ class CollectResult:
     selected: list[str] = field(default_factory=list)
     rejected: list[str] = field(default_factory=list)
     selection_reason: str = ""
-    forced: list[str] = field(default_factory=list)              # 선별과 무관하게 강제로 넣은 문서 (모델 카드)
+    forced: list[str] = field(default_factory=list)              # 선별과 무관하게 강제로 넣은 문서 (모델 카드, 라이선스 원문)
     fetched: list[Document] = field(default_factory=list)        # 이번에 색인한 문서
     chunks_added: int = 0
     cache_hit: bool = False                                      # 모든 검색어가 이미 수집돼 있었는지
@@ -161,18 +162,21 @@ def select_candidates(model_id: str, question: str, candidates: list[Candidate])
     return picked
 
 
-def _fetch_body(c: Candidate, is_own_card: bool) -> Document | None:
+_FETCHERS = {"hf_card": hf_card.fetch, "hf_license": hf_card.fetch_license, "wikipedia": wikipedia.fetch}
+
+
+def _fetch_body(c: Candidate, forced: bool) -> Document | None:
     """본문 수집. 이미 다른 모델 때문에 받아 둔 원문이 있으면 재사용한다."""
     cfg = get_config()["collect"]
     doc = cache.load_doc(c.doc_id)
     if doc is None:
-        doc = offline.fetch(c) if cfg["offline_mode"] else (hf_card.fetch(c) if c.source_type == "hf_card" else wikipedia.fetch(c))
+        doc = offline.fetch(c) if cfg["offline_mode"] else _FETCHERS[c.source_type](c)
         if doc is None:
             return None
         cache.save_doc(doc)
     doc.query = c.query
-    # 너무 긴 문서는 앞부분만 쓴다. 선택 모델의 모델 카드는 이 규칙에서 제외한다.
-    if not is_own_card and len(doc.text) > cfg["max_doc_chars"]:
+    # 너무 긴 문서는 앞부분만 쓴다. 강제 포함 문서(선택 모델의 카드·라이선스 원문)는 이 규칙에서 제외한다.
+    if not forced and len(doc.text) > cfg["max_doc_chars"]:
         doc.text = doc.text[:cfg["max_doc_chars"]]
     return doc
 
@@ -189,8 +193,12 @@ def collect(model: dict[str, Any], question: str, on_step: StepCallback = _noop)
     result.concept_queries = [q for q in result.queries if route(q, model) == "wiki"]
     result.new_queries = [q for q in result.queries if cache.normalize_query(q) not in entry["queries"]]
     need_card = own_card.doc_id not in entry["docs"] and not entry.get("no_card")
+    # 라이선스 질문이면 저장소의 LICENSE 원문도 강제로 넣는다 (라이선스 이름만으로 조건을 추측하지 않게)
+    own_license = hf_card.license_candidate(model_id, model.get("license_link"))
+    need_license = (is_license_question(question) and own_license.doc_id not in entry["docs"]
+                    and not entry.get("no_license"))
 
-    if not result.new_queries and not need_card:
+    if not result.new_queries and not need_card and not need_license:
         result.cache_hit = True
         result.docs_total = len(entry["docs"])
         on_step("수집 생략", f"이미 수집된 문서 {result.docs_total}건 사용")
@@ -206,28 +214,36 @@ def collect(model: dict[str, Any], question: str, on_step: StepCallback = _noop)
         result.selected, result.selection_reason = select_candidates(model_id, question, result.candidates)
     result.rejected = [c.doc_id for c in result.candidates if c.doc_id not in result.selected]
 
-    to_fetch: list[tuple[Candidate, bool]] = []
+    # (후보, 강제 포함 종류) 종류: "card" | "license" | None(선별된 문서)
+    to_fetch: list[tuple[Candidate, str | None]] = []
     if need_card:
-        result.forced.append(own_card.doc_id)
-        to_fetch.append((own_card, True))
+        to_fetch.append((own_card, "card"))
+    if need_license:
+        to_fetch.append((own_license, "license"))
+    result.forced = [c.doc_id for c, _ in to_fetch]
     by_id = {c.doc_id: c for c in result.candidates}
-    to_fetch += [(by_id[i], False) for i in result.selected]
+    to_fetch += [(by_id[i], None) for i in result.selected]
 
     on_step("본문 수집", f"문서 {len(to_fetch)}건 본문 수집 중")
-    for c, is_own in to_fetch:
+    offline_mode = get_config()["collect"]["offline_mode"]
+    missing_msg = {"card": "이 모델은 모델 카드(README)가 없습니다.",
+                   "license": "이 모델 저장소에는 LICENSE 파일이 없어 라이선스 원문을 근거로 쓸 수 없습니다."}
+    for c, kind in to_fetch:
         try:
-            doc = _fetch_body(c, is_own)
+            doc = _fetch_body(c, kind is not None)
         except http.ExternalAPIError as e:
             log.warning("본문 수집 실패 %s: %s", c.doc_id, e)
-            result.errors.append(f"'{c.title}' 본문을 가져오지 못했습니다.")
+            gated = "401" in str(e) and model.get("gated")
+            result.errors.append(f"'{c.title}'은(는) gated 저장소라 HF_TOKEN 없이는 받을 수 없습니다." if gated
+                                 else f"'{c.title}' 본문을 가져오지 못했습니다.")
             continue
         if doc is None:
-            if is_own and get_config()["collect"]["offline_mode"]:
+            if kind and offline_mode:
                 # 묶음에 없을 뿐 저장소에는 있을 수 있으므로 기록하지 않는다 (온라인에서 다시 시도)
-                result.errors.append("오프라인 문서 묶음에 이 모델의 모델 카드가 없습니다.")
-            elif is_own:
-                entry["no_card"] = True  # README가 없는 저장소: 다음 질문부터 다시 시도하지 않는다
-                result.errors.append("이 모델은 모델 카드(README)가 없습니다.")
+                result.errors.append(f"오프라인 문서 묶음에 '{c.title}'이(가) 없습니다.")
+            elif kind:
+                entry[f"no_{kind}"] = True  # 저장소에 파일이 없음: 다음 질문부터 다시 시도하지 않는다
+                result.errors.append(missing_msg[kind])
             continue
         result.fetched.append(doc)
 
