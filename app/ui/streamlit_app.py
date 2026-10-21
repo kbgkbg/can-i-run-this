@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # streamlit run은 스크립트 폴더만 경로에 넣는다
 
@@ -110,7 +111,8 @@ def hardware_panel() -> None:
         st.caption(f"ℹ {n}")
 
 
-def sidebar(models: dict[str, dict]) -> dict | None:
+def sidebar(models: dict[str, dict]) -> tuple[dict | None, Any]:
+    """(선택 모델, 수집 문서 목록을 나중에 채울 사이드바 자리)"""
     with st.sidebar:
         st.header("모델 선택")
         ids = list(models)  # models.json 순서 = 다운로드순
@@ -128,15 +130,20 @@ def sidebar(models: dict[str, dict]) -> dict | None:
         hardware_panel()
         st.divider()
         st.caption(f"모델 메타데이터 색인: {count(META_COLLECTION)}건")
-        if model_id:
-            m = models[model_id]
-            docs = cache.indexed_docs(model_id)
-            st.caption(f"수집된 문서 {len(docs)}건 · 청크 {count_model_docs(model_id)}개")
-            for d in docs.values():
-                st.caption(f"· [{md_escape(d['title'])}]({d['source_url']})")
-            if m.get("config_status") != "ok":
-                st.caption("⚠ 이 모델은 gated 저장소라 레이어 수 등 일부 메타데이터가 없습니다.")
-        return models.get(model_id) if model_id else None
+        # 수집 문서 목록은 자리만 잡고 main() 끝에서 채운다. 사이드바가 질문 처리보다 먼저 그려져
+        # 방금 수집한 문서가 다음 조작 전까지 "0건"으로 보이던 문제를 막는다.
+        docs_slot = st.empty()
+        return (models.get(model_id) if model_id else None), docs_slot
+
+
+def render_doc_status(m: dict, slot: Any) -> None:
+    with slot.container():
+        docs = cache.indexed_docs(m["id"])
+        st.caption(f"수집된 문서 {len(docs)}건 · 청크 {count_model_docs(m['id'])}개")
+        for d in docs.values():
+            st.caption(f"· [{md_escape(d['title'])}]({d['source_url']})")
+        if m.get("config_status") != "ok":
+            st.caption("⚠ 이 모델은 gated 저장소라 레이어 수 등 일부 메타데이터가 없습니다.")
 
 
 # ------------------------------------------------------------------ 조건 기반 탐색 (F2011)
@@ -203,8 +210,17 @@ def model_header(m: dict) -> None:
 def fit_card(m: dict, hw: Hardware) -> tuple[FitReport, dict[str, SpeedEstimate]]:
     """실행 가능 판정 카드. 판정에 쓴 값의 근거(메타데이터·사양표)와 계산값을 구분해 보여 준다."""
     cfg = get_config()["hardware"]
-    max_ctx = m.get("max_context") or 131072
-    context = st.session_state.get("context", min(cfg["default_context"], max_ctx))
+    max_ctx = int(m.get("max_context") or 131072)
+    min_ctx = min(512, max_ctx)
+    # 모델마다 최대 컨텍스트가 달라 값을 모델별 키로 둔다. 한 키를 공유하면 32k로 올린 뒤
+    # 4k 모델로 바꿨을 때 위젯 값이 최댓값을 넘어 예외가 났다.
+    # 화면에 없는 위젯의 상태는 Streamlit이 지우므로, 모델별 값은 일반 딕셔너리에 따로 보관해 돌아왔을 때 복원한다.
+    key = f"context::{m['id']}"
+    saved = st.session_state.setdefault("contexts", {})
+    if key not in st.session_state:
+        st.session_state[key] = saved.get(m["id"], min(cfg["default_context"], max_ctx))
+    context = max(min_ctx, min(int(st.session_state[key]), max_ctx))
+    st.session_state[key] = saved[m["id"]] = context
     report = assess(m, hw, context)
     speeds = estimate_all(m, hw, report)
 
@@ -221,7 +237,7 @@ def fit_card(m: dict, hw: Hardware) -> tuple[FitReport, dict[str, SpeedEstimate]
                         + (f", 추정 약 {sp:.0f} tok/s" if sp else "") + " (계산값)")
 
         c1, c2 = st.columns([1, 3])
-        c1.number_input("컨텍스트 길이", min_value=512, max_value=int(max_ctx), step=1024, value=int(context), key="context")
+        c1.number_input("컨텍스트 길이", min_value=min_ctx, max_value=max_ctx, step=1024, key=key)
         rows = [{
             "양자화": r.quant,
             "필요 메모리(GB)": None if r.total_gb is None else round(r.total_gb, 1),
@@ -336,7 +352,7 @@ def main() -> None:
     models = preflight()
     if models is None:
         return
-    m = sidebar(models)
+    m, docs_slot = sidebar(models)
     recommend_cards()
     if m is None:
         st.info("왼쪽에서 질문할 모델을 선택하세요.")
@@ -364,6 +380,11 @@ def main() -> None:
         reply = handle_question(m, question, calc)
         history.append(reply)
         render_message(reply, stream_tok_s=stream_tok_s)
+    render_doc_status(m, docs_slot)
 
 
-main()
+try:
+    main()
+except Exception:  # noqa: BLE001 - 예상 못 한 오류도 화면에는 안내만 (NF2004). rerun/stop은 BaseException이라 지나간다
+    log.exception("화면 처리 중 오류")
+    st.error("화면을 그리는 중 오류가 발생했습니다. 새로고침해도 계속되면 logs/app.log를 확인하세요.")

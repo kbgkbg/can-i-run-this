@@ -1,0 +1,7 @@
+# streamlit run을 프로젝트 루트에서 실행할 때 적용된다.
+[client]
+# 예외가 나도 브라우저에는 일반 안내만 보이고 예외 종류·메시지·트레이스백은 콘솔에만 (NF2004)
+showErrorDetails = "none"
+
+[browser]
+gatherUsageStats = false

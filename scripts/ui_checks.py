@@ -43,6 +43,17 @@ if case in ("normal", "wrongkey"):
         out["messages_4b"] = len(at.chat_message)
         at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-8B").run()
         out["messages_8b_back"] = len(at.chat_message)
+if case == "ctx":
+    # 회귀: 컨텍스트를 32k로 올린 뒤 최대 4k 모델로 바꾸면 위젯 값이 최댓값을 넘어 예외가 났다
+    at.sidebar.selectbox(key="manual_gpu").select("RTX 3080").run()
+    next(b for b in at.sidebar.button if b.label == "적용").click().run()
+    at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-8B").run()
+    at.number_input(key="context::Qwen/Qwen3-8B").set_value(32768).run()
+    at.sidebar.selectbox(key="model_id").select("utter-project/EuroLLM-1.7B-Instruct").run()
+    out["small_ctx"] = at.number_input(key="context::utter-project/EuroLLM-1.7B-Instruct").value
+    at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-8B").run()
+    out["restored_ctx"] = at.number_input(key="context::Qwen/Qwen3-8B").value
+    out["exception"] = len(at.exception)
 print("@@" + json.dumps(out, ensure_ascii=False))
 '''
 
@@ -72,6 +83,10 @@ def main() -> int:
     rows.append(("NF2004", "잘못된 키: 사용자 문구만 표시, 화면 예외 없음",
                  w.get("exception") == 0 and any("API 키" in a for a in w.get("assistant", [])), (w.get("assistant") or [""])[0][:80]))
 
+    c = run_case("ctx")
+    rows.append(("F2010", "컨텍스트 32k 설정 후 4k 모델로 전환해도 예외 없음, 돌아오면 값 복원",
+                 c.get("exception") == 0 and c.get("small_ctx") == 4096 and c.get("restored_ctx") == 32768,
+                 f"전환 후 {c.get('small_ctx')}, 복귀 후 {c.get('restored_ctx')}, 예외 {c.get('exception')}"))
     passed = sum(ok for _, _, ok, _ in rows)
     lines = ["# 화면 기능 점검 결과 (Streamlit AppTest)", "",
              f"- 실행: `python scripts/ui_checks.py` · 통과 {passed}/{len(rows)}", "",

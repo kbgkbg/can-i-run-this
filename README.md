@@ -53,7 +53,7 @@ streamlit run app/ui/streamlit_app.py
 | 명령 | 용도 |
 |---|---|
 | `python scripts/run_checks.py` | 요구사항 자동 점검 22항목 → `docs/eval/test_results.md` |
-| `python scripts/ui_checks.py` | 화면 점검 (모델별 대화, 진행 상태, 키 누락·색인 0건·잘못된 키) → `docs/eval/ui_test_results.md` |
+| `python scripts/ui_checks.py` | 화면 점검 7항목 (모델별 대화, 진행 상태, 키 누락·색인 0건·잘못된 키, 컨텍스트 전환 회귀) → `docs/eval/ui_test_results.md` |
 | `python scripts/collect_demo.py "<모델ID>" "<질문>"` | 프롬프트 1 검색어, 후보, 프롬프트 2 선별/제외, 색인 결과, 캐시 사용 여부 |
 | `python scripts/ask_demo.py "<모델ID>" "<질문>" [--top-k N] [--search-type mmr]` | 근거 목록, 답변, 인용 근거, 수치 검증 경고 |
 | `python scripts/reindex_docs.py` | 수집한 원문을 현재 청크 설정으로 재색인 (청크 크기 변경 효과 비교) |

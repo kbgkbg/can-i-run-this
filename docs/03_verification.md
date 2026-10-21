@@ -5,7 +5,7 @@
 | 증빙 | 내용 | 재현 명령 |
 |---|---|---|
 | [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 22항목 | `python scripts/run_checks.py` |
-| [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 6항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
+| [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 7항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
 | [eval/mmr_comparison.md](eval/mmr_comparison.md) | 유사도 vs MMR 근거 비교 (F2014) | `python scripts/compare_mmr.py` |
 | [eval/rag_comparison.md](eval/rag_comparison.md) | RAG 사용 전후 답변 비교 (F2015) | `python scripts/compare_rag.py` |
 | [screenshots/](screenshots/) | 화면 캡처 10장 | Playwright로 실제 앱에서 촬영 |
@@ -107,7 +107,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 
 ## 3. 테스트 결과표
 
-자동 점검 22항목과 화면 점검 6항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
+자동 점검 22항목과 화면 점검 7항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
 
 추가로 개발 중 수동 확인한 비정상·경계 상황:
 
@@ -121,7 +121,30 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 | LLM 서버 주소 오류 | "LLM 서버가 오류를 돌려주었습니다 (HTTP 403)" | 통과 |
 | 컨텍스트 32k로 변경 | KV 캐시 증가로 판정 변화 (Q4_K_M 5.8 → 10.2GB, 오프로딩) | 통과 |
 
-## 4. 화면 캡처 목록
+## 4. 독립 검증 (새 clone에서 README 절차만으로)
+
+개발 환경의 색인·캐시 없이, 저장소를 새로 clone해 README 순서대로 설치·색인·실행했다.
+
+| 단계 | 결과 |
+|---|---|
+| clone 직후 | `docs/spec.pdf`·`data/chroma`·`.env` 없음 (커밋되지 않음 확인) |
+| `pip install -r requirements.txt` (새 가상환경) | 설치 성공, `pip check` 충돌 없음, 버전 고정 확인 (langchain 1.3.14, chromadb 1.5.9, streamlit 1.62.0, openai 2.54.0) |
+| `.env` 값 없이 `build_meta_index.py` | ".env에 다음 값이 없습니다: OPENAI_API_KEY, OPENAI_BASE_URL, CONTACT_INFO" 후 종료 |
+| `.env` 채운 뒤 `build_meta_index.py` 2회 | 0 → 150건, 150 → 150건 |
+| `run_checks.py` (문서 캐시 없는 상태) | 22/22 |
+| `ui_checks.py` | 6/6 (이후 회귀 테스트 추가로 7/7) |
+| 오프라인 모드 (`collect.offline_mode: true`) | 묶음만으로 Qwen3-14B 모델 카드 강제 포함·색인, 인용 답변 |
+| 브라우저 전체 흐름 (Playwright) | 하드웨어 감지(GPU 없음 → CPU·RAM 판정) → 처음 묻는 모델의 라이선스 질문(LICENSE 원문 수집·인용·면책) → 조건 탐색 "한국어 되는 모델, 10B 이하" 카드 4개 → 카드 클릭으로 모델 전환 → 속도 체험(9.3 tok/s 재생). 화면에 트레이스백·키 노출 없음 |
+
+**독립 검증에서 찾아 고친 버그**
+
+| 버그 | 재현 | 수정 | 확인 |
+|---|---|---|---|
+| 컨텍스트를 32k로 올린 뒤 최대 4k 모델(EuroLLM)로 바꾸면 화면에 **트레이스백**(`StreamlitValueAboveMaxError`) — NF2004 위반 | AppTest로 재현 | 컨텍스트를 모델별 키로 두고 범위 안으로 제한, 모델별 값은 따로 보관해 돌아오면 복원 | `ui_checks.py` 회귀 항목 PASS (전환 후 4096, 복귀 후 32768, 예외 0) |
+| 질문으로 문서를 새로 수집해도 사이드바 "수집된 문서 0건"이 다음 조작 전까지 그대로 | 브라우저 캡처 | 사이드바가 질문 처리보다 먼저 그려지는 문제 → 자리만 잡고 처리 후 채움 | 질문 전 0건 → 같은 실행에서 3건 |
+| 예상 못 한 예외가 나면 Streamlit 기본 설정상 트레이스백이 보일 수 있음 | 위 버그로 확인 | 앱 전체를 감싸 사용자 문구만 표시 + `.streamlit/config.toml` `showErrorDetails = "none"` | `streamlit config show`에서 적용 확인 |
+
+## 5. 화면 캡처 목록
 
 | 파일 | 내용 |
 |---|---|
@@ -136,7 +159,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 | p7_01_recommend.png | 조건 탐색 결과 카드 |
 | p7_02_license.png | 라이선스 답변 (라이선스 원문 근거, 면책 안내) |
 
-## 5. 상호 체크리스트 (옆 교육생 점검용)
+## 6. 상호 체크리스트 (옆 교육생 점검용)
 
 점검자가 직접 앱을 실행해 확인하고 결과를 적는다. (통과 / 실패 / 미확인)
 
@@ -154,14 +177,15 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 | 10 | 라이선스 질문에 원문 근거와 면책 안내가 나온다 | | |
 | 11 | `.env`의 키를 지우고 실행하면 키 누락 안내가 나온다 | | |
 | 12 | 화면 어디에도 API 키, 프롬프트 전문, 스택 트레이스가 보이지 않는다 | | |
+| 13 | 판정 카드에서 컨텍스트를 크게 올린 뒤 다른 모델로 바꿔도 오류가 나지 않는다 | | |
 
 - 점검자: ____________ · 점검일: ____________
 
-## 6. 제출 전 점검 목록 (명세 4.8)
+## 7. 제출 전 점검 목록 (명세 4.8)
 
 | 항목 | 상태 |
 |---|---|
-| 필수 기능 F2001 ~ F2012가 모두 동작한다 | 완료 (자동 점검 22/22, 화면 점검 6/6) |
+| 필수 기능 F2001 ~ F2012가 모두 동작한다 | 완료 (자동 점검 22/22, 화면 점검 7/7) |
 | 선택한 심화 기능(F2014·F2015·F2016)이 동작하고 필수 기능 결과와 비교되어 있다 | 완료 (mmr_comparison, rag_comparison) |
 | 증명을 위한 스크린샷을 모두 첨부했다 | 완료 (10장). 본인 PC에서 "하드웨어 감지" 자동 감지 화면은 추가 촬영 필요 (개발 환경에 GPU 없음) |
 | 요구사항 정의서·RAG 설계문서·소스코드·README.md | 완료 |
