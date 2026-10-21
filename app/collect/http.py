@@ -3,6 +3,7 @@
 - User-Agent에 프로젝트명과 연락처를 넣는다 (위키백과 User-Agent 정책).
 - 호스트별 최소 호출 간격을 지킨다 (arXiv 3초 등). 재시도도 같은 간격 규칙을 거친다.
 - 429/5xx와 연결 오류는 지수 백오프로 재시도하고, Retry-After 헤더가 있으면 따른다.
+  Retry-After가 max_retry_after_s보다 길면 재시도하지 않고 실패로 처리한다.
 - 실패하면 ExternalAPIError를 던진다. 상세는 로그에만 남기고 화면에는 안내 문구만 쓴다 (NF2004).
 """
 from __future__ import annotations
@@ -91,6 +92,10 @@ def request(method: str, url: str, *, headers: dict[str, str] | None = None, **k
             if resp.status_code not in retry_statuses:
                 break  # 404, 401 같은 오류는 재시도해도 같으므로 바로 실패
             delay = _retry_after_seconds(resp)
+            if delay is not None and delay > cfg["max_retry_after_s"]:
+                # 서버가 오래 기다리라고 하면 재시도하지 않고 포기한다 (대화형 응답 시간 보호, 서버 요청 존중)
+                last_reason = f"호출 제한(HTTP {resp.status_code})"
+                break
 
         if attempt < attempts - 1:
             time.sleep(delay if delay is not None else cfg["backoff_factor"] * (2 ** attempt))

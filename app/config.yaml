@@ -42,12 +42,13 @@ http:
   timeout_s: 20
   max_retries: 3
   backoff_factor: 1.0        # 재시도 대기: 1s, 2s, 4s ...
+  max_retry_after_s: 10      # 서버가 이보다 오래 기다리라고 하면(Retry-After) 재시도하지 않는다
   retry_statuses: [429, 500, 502, 503, 504]
   min_interval_s:            # 호스트별 최소 호출 간격 (초)
     default: 0.5
     huggingface.co: 0.2
-    ko.wikipedia.org: 0.5
-    en.wikipedia.org: 0.5
+    ko.wikipedia.org: 1.0
+    en.wikipedia.org: 1.0
     export.arxiv.org: 3.0    # arXiv API 이용 규칙: 3초에 1회
     arxiv.org: 3.0
 

@@ -16,7 +16,16 @@
 
 ## 2. 외부 문서 (질문 시점 수집, `model_docs` 컬렉션)
 
-Phase 3 이후 채움: Hugging Face 모델 카드, 위키백과, arXiv PDF
+| 출처 | 수집 방법 | 원문 출처 표기 | 이용 조건 |
+|---|---|---|---|
+| Hugging Face 모델 카드 | `https://huggingface.co/{모델ID}/raw/main/README.md` (후보 검색: `/api/models?search=`) | 모델 페이지 URL | 모델 카드별 라이선스(각 저장소의 license 필드·LICENSE 파일)를 따른다. 원문 링크를 함께 표시 |
+| 위키백과 (한국어 우선, 없으면 영어) | MediaWiki API `list=search`, `prop=extracts&explaintext` | 문서 URL | CC BY-SA 4.0 — 출처(문서 URL)와 라이선스를 표시. User-Agent에 프로젝트명과 연락처 포함 |
+| arXiv PDF (Phase 8) | | PDF URL + 쪽 번호 | |
+
+- 수집 시각은 청크 메타데이터 `collected_at`에 문서별로 남는다.
+- 원문은 `data/cache/docs/`에 저장되고(커밋하지 않음), 같은 문서를 다른 모델이 고르면 다시 받지 않는다.
+- `data/offline_docs/`: 외부 API를 쓸 수 없는 환경용 예시 묶음 (`scripts/export_offline_docs.py`로 생성, 2026-10-21 수집분 6건).
+  각 파일에 원문 URL과 라이선스(`license` 필드)가 들어 있다.
 
 ## 3. 하드웨어 사양 표 — `data/hw_specs.csv`
 
