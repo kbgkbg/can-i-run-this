@@ -1,0 +1,16 @@
+# 비밀 정보 (NF2003): .env.example만 커밋
+.env
+
+# 명세서는 對外秘 문서라 저장소에 올리지 않는다 (로컬 docs/spec.pdf에만 둔다)
+docs/spec.pdf
+
+# 가상환경 / 캐시
+.venv/
+__pycache__/
+*.pyc
+
+# 실행 중 생성되는 파일
+data/chroma/
+data/cache/
+logs/*
+!logs/.gitkeep
