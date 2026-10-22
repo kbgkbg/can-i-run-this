@@ -32,9 +32,7 @@ DEGRADE_SYSTEM = """너는 LLM 체험 서비스의 연출 담당이다. 주어�
 
 정확히 지킬 것
 - 이 체급의 말투·능력: {ability}
-- 사실·수치·계산·코드 중 정확히 {errors}곳을 그럴듯하게 틀린 내용으로 바꾼다 (그만큼 없으면 있는 만큼).
-  틀릴 곳이 없는 잡담이면 대신 이 체급의 이해력만큼 질문 의도를 살짝 엇나가게 답한다. 틀린 곳을 표시하거나 암시하지 않는다.
-{drop}{repeat}{length}{quant}
+{errors_rule}{drop}{repeat}{length}{quant}
 - 실수는 우스꽝스럽지 않게, 그 크기 모델이 실제로 낼 법한 형태로 넣는다. 연출이라는 사실은 답변에 쓰지 않는다.
 
 출력은 JSON 하나만: {{"answer": "고쳐 쓴 답변", "mistakes": ["넣은 실수를 한 줄씩 (원래 값 -> 바꾼 값)"]}}"""
@@ -77,7 +75,11 @@ def make_persona(model: dict[str, Any], quant: str) -> Persona:
 def _degrade_messages(p: Persona, question: str, base: str, history: list[tuple[str, str]] | None = None) -> list:
     r = p.rule
     system = DEGRADE_SYSTEM.format(
-        tier=p.tier, params_b=p.params_b, errors=r["errors"], ability=r.get("ability", ""),
+        tier=p.tier, params_b=p.params_b, ability=r.get("ability", ""),
+        # 실수 0개 체급(대형 이상)에는 "의도를 엇나가게" 규칙을 주지 않는다. 함께 주면 대형도 앞 대화를 틀리게 기억했다
+        errors_rule=(f"- 사실·수치·계산·코드 중 정확히 {r['errors']}곳을 그럴듯하게 틀린 내용으로 바꾼다 (그만큼 없으면 있는 만큼).\n"
+                     "  틀릴 곳이 없는 잡담이면 대신 이 체급의 이해력만큼 질문 의도를 살짝 엇나가게 답한다. 틀린 곳을 표시하거나 암시하지 않는다.\n"
+                     if r["errors"] else "- 사실·수치·계산·기억은 원래 답변 그대로 둔다. 내용을 바꾸지 말고 말투만 다듬는다.\n"),
         drop="- 질문 속 요구나 조건 하나를 빠뜨리고 답하지 않는다.\n" if r["drop_condition"] else "",
         repeat="- 같은 뜻의 문장을 한 번 반복한다.\n" if r["repeat"] else "",
         length=f"- 전체를 {r['max_sentences']}문장 이내로 줄인다.\n" if r["max_sentences"] else "",
@@ -115,8 +117,9 @@ def answer(model: dict[str, Any], quant: str, question: str, history: list[tuple
     p = make_persona(model, quant)
     base = strip_rag_marks(base) if base else base_answer(question, history)
     r = p.rule
-    if not (r["errors"] or r["drop_condition"] or r["repeat"] or r["max_sentences"] or p.quant_note):
-        return PersonaAnswer(p, base)  # 큰 체급: 근거 없는 답 그대로 (그 자체로 근거 없는 모델의 답)
+    if not (r["errors"] or r["drop_condition"] or r["repeat"] or r["max_sentences"]):
+        # 큰 체급: 기준 답 그대로. 양자화 말투 지시만으로 고쳐 쓰게 했더니 "능금"을 "능금나무"로 바꾸는 등 내용이 바뀌었다
+        return PersonaAnswer(p, base)
 
     def validate(v: Any) -> tuple[str, list[str]]:
         if not isinstance(v, dict) or not isinstance(v.get("answer"), str) or not v["answer"].strip():

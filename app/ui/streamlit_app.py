@@ -409,15 +409,28 @@ def _paced(text: str, tok_s: float):
         time.sleep(delay)
 
 
+def _speed_caption(msg: dict, stream_tok_s: float | None) -> None:
+    """추정 속도 안내. 재생할 때와 지난 대화로 다시 그릴 때 요소 구성을 똑같이 맞춘다.
+
+    재생 때만 캡션을 넣었더니 다음 질문을 처리하는 동안 요소 위치가 한 칸씩 밀려, 이전 실행의 답변이
+    흐린 잔상으로 한 번 더 보였다 (Streamlit은 실행이 끝날 때까지 이전 요소를 남겨 둔다).
+    """
+    if stream_tok_s:
+        msg["played_tok_s"] = stream_tok_s
+        st.caption(f"⏱ 내 PC 추정 속도 {stream_tok_s:.1f} tok/s로 재생 중 (추정치, 실제와 다를 수 있음)")
+    elif msg.get("played_tok_s"):
+        st.caption(f"⏱ 내 PC 추정 속도 {msg['played_tok_s']:.1f} tok/s로 재생했습니다 (추정치)")
+
+
 def render_message(msg: dict, stream_tok_s: float | None = None) -> None:
     if msg.get("persona"):
-        # 흉내 답변을 켠 질문은 연기 답변만 보인다 (근거 답변은 연기의 기준으로만 쓰고 접어 둔다)
-        render_persona(msg["persona"], stream_tok_s)
+        # 🎭 대화 체험의 답은 연기 답변 말풍선으로만 보인다
+        render_persona(msg, stream_tok_s)
         return
     with st.chat_message(msg["role"]):
-        # 흉내 답변이 있으면 "내 PC에서 돌린 모델"에 해당하는 흉내 답변만 추정 속도로 재생한다
-        if stream_tok_s and msg["role"] == "assistant" and not msg.get("error") and not msg.get("persona"):
-            st.caption(f"⏱ 내 PC 추정 속도 {stream_tok_s:.1f} tok/s로 재생 중 (추정치, 실제와 다를 수 있음)")
+        if msg["role"] == "assistant" and not msg.get("error"):
+            _speed_caption(msg, stream_tok_s)
+        if stream_tok_s and msg["role"] == "assistant" and not msg.get("error"):
             st.write_stream(_paced(msg["content"], stream_tok_s))
         else:
             st.markdown(msg["content"])
@@ -432,12 +445,13 @@ def render_message(msg: dict, stream_tok_s: float | None = None) -> None:
                 st.caption(f"처리 시간 {msg['elapsed']:.1f}초")
 
 
-def render_persona(pa: dict, stream_tok_s: float | None = None) -> None:
-    """흉내 답변 (연기)만 말풍선으로 보인다. 근거 답변은 연기의 기준으로만 쓰고 화면에는 내지 않는다."""
+def render_persona(msg: dict, stream_tok_s: float | None = None) -> None:
+    """🎭 연기 답변 말풍선."""
+    pa = msg["persona"]
     with st.chat_message("🎭", avatar="🎭"):
         st.markdown(f"**{md_escape(pa['model_id'])} · {pa['quant']} · {pa['tier']} 체급(유효 약 {pa['params_b']}B)** (연기)")
+        _speed_caption(msg, stream_tok_s)
         if stream_tok_s:
-            st.caption(f"⏱ 내 PC 추정 속도 {stream_tok_s:.1f} tok/s로 재생 중 (추정치)")
             st.write_stream(_paced(pa["answer"], stream_tok_s))
         else:
             st.markdown(pa["answer"])
