@@ -654,27 +654,43 @@ def consult_page() -> None:
 
 
 def named_model_reply(named: list[str], hw: Hardware | None) -> dict:
-    """이름으로 물은 모델의 판정 카드와 설명(코드가 카드 내용으로 만든다). 안 맞으면 같은 계열 대안을 붙인다."""
+    """이름으로 물은 모델의 판정 카드와 설명. 안 맞으면 "점점 줄여" 가도록 더 작은 대안을 함께 보여 준다."""
     cards = [recommend.model_card(mid, hw) for mid in named[:3]]
     if hw is None:
         return {"content": "물어보신 모델을 찾았어요. 내 PC 사양을 고르거나 GPU·RAM을 알려 주시면 돌아가는지 판정해 드릴게요.",
                 "cards": cards}
     floor = get_config()["hardware"]["usable_tok_s"]
     device = hw.spec_name or hw.gpu_name or "GPU 없는 PC"
-    lines, alts = [], []
+    lines, need_smaller = [], False
     for c in cards:
         if c.verdict == "GPU에 전부 올라감" and (c.tok_s or 0) >= floor:
-            lines.append(f"**{c.model_id}**은(는) {device}에서 돌릴 수 있어요: {c.quant}로 GPU에 다 올라가고 약 {c.tok_s:.0f} tok/s (계산값).")
-            continue
-        if c.quant:
-            why = f"{c.quant} 기준 {c.verdict}, 필요 {c.total_gb:.1f} GB" + (f", 약 {c.tok_s:.0f} tok/s" if c.tok_s else "")
+            lines.append(f"**{c.model_id}**은(는) {device}에서 잘 돌아가요: {c.quant}로 GPU에 다 올라가고 약 {c.tok_s:.0f} tok/s (계산값).")
+        elif c.verdict == "GPU에 전부 올라감":
+            lines.append(f"**{c.model_id}**은(는) {device}의 GPU에 다 올라가긴 하는데 약 {c.tok_s:.0f} tok/s로 느려요 (계산값). "
+                         "더 빠르게 쓰려면 아래 더 작은 모델도 보세요.")
+            need_smaller = True
+        elif c.verdict in ("일부 CPU 오프로딩 필요", "CPU·RAM만으로 가능(느림)"):
+            sp = f", 약 {c.tok_s:.0f} tok/s" if c.tok_s else ""
+            lines.append(f"**{c.model_id}**은(는) {device}에서 돌아가긴 해요: {c.quant} 기준 {c.verdict} (필요 {c.total_gb:.1f} GB{sp}, 계산값). "
+                         "일부가 CPU로 넘어가 느릴 수 있어요. 더 가볍게 쓰려면 아래 대안을 보세요.")
+            need_smaller = True
         else:
             why = f"{c.verdict} (어떤 양자화로도 메모리에 안 올라감)" if c.verdict == "불가" else (c.verdict or "판정 불가")
-        lines.append(f"**{c.model_id}**은(는) {device}에서 쓰기 어려워요: {why} (계산값).")
-        alts += [a for a in recommend.same_family_alternatives(c.model_id, hw) if a.model_id not in named]
-    if alts:
-        lines.append("대신 같은 계열에서 이 PC의 GPU에 다 올라가는 모델을 함께 보여 드릴게요.")
-    return {"content": "\n\n".join(lines), "cards": cards + alts[:3]}
+            lines.append(f"**{c.model_id}**은(는) {device}에서 쓰기 어려워요: {why} (계산값). 대신 이 PC에 맞는 더 작은 모델을 찾아볼게요.")
+            need_smaller = True
+    alts = []
+    if need_smaller:
+        seen = set(named)
+        for mid in named:
+            for a in recommend.smaller_alternatives(mid, hw):
+                if a.model_id not in seen:
+                    seen.add(a.model_id)
+                    alts.append(a)
+        if alts:
+            lines.append("크기를 줄이면서 이 PC의 GPU에 다 올라가는 모델이에요 (큰 것부터). 더 좁히고 싶으면 용도(코딩·한국어 등)를 말씀해 주세요.")
+        else:
+            lines.append("이 PC의 GPU에 다 올라가는 더 작은 모델을 찾지 못했어요. 용도를 말씀해 주시면 CPU 오프로딩까지 포함해 찾아볼게요.")
+    return {"content": "\n\n".join(lines), "cards": cards + alts[:4]}
 
 
 def render_consult_message(msg: dict, idx: int) -> None:

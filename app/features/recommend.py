@@ -251,6 +251,34 @@ def model_card(model_id: str, hw: Hardware | None) -> Recommendation:
     return rec
 
 
+def smaller_alternatives(model_id: str, hw: Hardware, limit: int = 4) -> list[Recommendation]:
+    """물어본 모델이 잘 안 돌아갈 때, 이 PC의 GPU에 다 올라가고 쓸 만한 속도인 더 작은 모델들.
+
+    계열을 넘어 전체에서 찾되 (같은 제작사 모델을 먼저), 물어본 모델보다 작은 것만, 큰 것부터.
+    "점점 줄여 나가는" 대화를 돕기 위해, 돌아가는 모델 중 가장 큰 쪽(가장 똑똑할 가능성)부터 보여 준다.
+    """
+    asked = {x["id"]: x for x in load_models()}.get(model_id, {})
+    ceiling = asked.get("params") or float("inf")
+    org = model_id.split("/", 1)[0]
+    floor = get_config()["hardware"]["usable_tok_s"]
+    picked = []
+    for m in sorted(load_models(), key=lambda x: (x["org"] != org, -(x.get("params") or 0))):
+        if m["id"] == model_id or (m.get("params") or 0) >= ceiling:
+            continue
+        rec = model_card(m["id"], hw)
+        if rec.verdict == GPU_FULL and (rec.tok_s or 0) >= floor:
+            prefix = "같은 제작사예요. " if m["org"] == org else ""
+            rec.reason = f"{prefix}이 PC의 GPU에 다 올라가는 모델이에요 ({short_b(m.get('params'))})."
+            picked.append(rec)
+        if len(picked) >= limit:
+            break
+    return picked
+
+
+def short_b(n: int | None) -> str:
+    return f"{n / 1e9:.1f}B" if n else "크기 미상"
+
+
 def same_family_alternatives(model_id: str, hw: Hardware, limit: int = 3) -> list[Recommendation]:
     """같은 제작사·계열(이름 첫 토큰, 예: Qwen3.8)에서 GPU에 다 올라가고 쓸 만한 속도인 모델, 큰 것부터."""
     org, name = model_id.split("/", 1)

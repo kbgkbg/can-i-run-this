@@ -285,6 +285,22 @@ def _():
     return got == ["apple", "Apple M5", 11.2, 153.0], f"{got} | {t.hw_note}"
 
 
+@check("F2011", "추천 상담: 큰 모델이 안 맞으면 '못 돌림'으로 끝내지 않고 이 PC에 맞는 더 작은 모델을 큰 것부터 제시")
+def _():
+    from app.features.hw_detect import manual
+    from app.features.recommend import model_card, smaller_alternatives
+    hw = manual("RTX 5060 Ti 16GB", 32)
+    asked = model_card("Qwen/Qwen3.8-27B", hw)  # 오프로딩 (돌아가긴 하지만 느림)
+    alts = smaller_alternatives("Qwen/Qwen3.8-27B", hw)
+    big = asked.total_gb  # 참고용
+    params = {x["id"]: x.get("params") for x in load_models()}
+    sizes = [params[a.model_id] for a in alts]
+    ok = (asked.verdict == "일부 CPU 오프로딩 필요" and len(alts) >= 2
+          and all(a.verdict == "GPU에 전부 올라감" and (a.tok_s or 0) >= 10 for a in alts)
+          and all(s < params["Qwen/Qwen3.8-27B"] for s in sizes) and sizes == sorted(sizes, reverse=True))
+    return ok, f"27B={asked.verdict}, 대안 {[(a.model_id.split('/')[-1], round(a.tok_s)) for a in alts]}"
+
+
 @check("F2011", "추천 상담: 모델 이름으로 물으면 그 모델을 찾고(띄어쓰기·꼬리 무시), 안 맞으면 같은 계열 대안")
 def _():
     from app.features.hw_detect import manual
