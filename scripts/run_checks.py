@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.collect import cache, http  # noqa: E402
 from app.collect.collector import collect, extract_queries  # noqa: E402
-from app.config import PROJECT_ROOT, env, get_config  # noqa: E402
+from app.config import PROJECT_ROOT, env, get_config, path  # noqa: E402
 from app.data_prep.item_text import item_text, load_models  # noqa: E402
 from app.index.indexer import index_models  # noqa: E402
 from app.index.store import DOCS_COLLECTION, META_COLLECTION, count, get_store  # noqa: E402
@@ -150,6 +150,53 @@ def _():
     ev = [Evidence(1, "a", "TopK=20, Temperature=0.6", "hf_card", "c", "u")]
     p = unverified_numbers("- TopK: 50 [근거 1]\n- Temperature: 0.6 [근거 1]", ev)
     return len(p) == 1 and "50" in p[0], f"{p}"
+
+
+@check("F2008", "단위가 붙은 소수(180.0B)는 일부(180)만 떼어 검사하지 않는다 (오탐 회귀)")
+def _():
+    ev = [Evidence(1, "a", "파라미터 수: 180.0B (179,999,981,459개)", "hf_card", "c", "u")]
+    p = unverified_numbers("- 파라미터 수: 180.0B (179,999,981,459개) [근거 1]", ev)
+    return p == [], f"경고 {p}"
+
+
+@check("F2007", "대화형 답변: 후속 질문은 이전 대화로 이해, 근거 밖 일반 지식에서 근거 없는 수치 문장 제거")
+def _():
+    from app.features.fit import memory_text
+    from app.rag.citations import strip_general_numbers
+    from app.rag.prompts import GENERAL_LABEL
+    calc = memory_text(m8)
+    first = run(MODEL, "Q4_K_M으로 돌리면 메모리 얼마나 필요해?", calc=calc, concept_queries=[])
+    follow = run(MODEL, "그럼 Q8_0은?", calc=calc, concept_queries=[],
+                 history=[("user", "Q4_K_M으로 돌리면 메모리 얼마나 필요해?"), ("assistant", first["answer"])])
+    q8 = next(ln for ln in calc.splitlines() if ln.startswith("- Q8_0"))
+    q8_total = q8.rsplit("= ", 1)[1].split(" GB")[0]
+    guard, removed = strip_general_numbers(f"x [근거 1]\n\n{GENERAL_LABEL}\n보통 수백 GPU 시간이 걸립니다. 기술 보고서를 보세요.", GENERAL_LABEL)
+    ok = q8_total in follow["answer"] and len(removed) == 1 and "수백" not in guard
+    return ok, f"후속 '그럼 Q8_0은?' 답에 Q8_0 계산값 {q8_total} GB 포함={q8_total in follow['answer']}, 일반 지식 수치 문장 제거 {removed}"
+
+
+@check("F2001", "최신 멀티모달(image-text-to-text) 모델과 최근 뜨는 원본 모델도 목록에 포함")
+def _():
+    snap = json.loads(path("models_json").read_text(encoding="utf-8"))
+    tags = {m.get("pipeline_tag") for m in models.values()}
+    want = [i for i in ("Qwen/Qwen3.8-27B", "Qwen/Qwen3.6-35B-A3B", "google/gemma-4-31B-it") if i in models]
+    ok = {"text-generation", "image-text-to-text"} <= tags and len(want) == 3 and len(snap.get("trending", [])) > 0
+    return ok, f"태그 {sorted(t for t in tags if t)}, 포함 {want}, trending {len(snap.get('trending', []))}건 (예: {snap.get('trending', [])[:3]})"
+
+
+@check("F2010", "하이브리드 어텐션 KV: 선형 레이어 제외, sliding 레이어는 창 크기까지만")
+def _():
+    from app.features.fit import kv_cache_bytes
+    q, g = models["Qwen/Qwen3.8-27B"], models["google/gemma-4-31B-it"]
+    plain = lambda m, c: kv_cache_bytes(dict(m, attn_layers=None), c)  # noqa: E731 - 모든 레이어를 전체 어텐션으로 본 값
+    ratio = kv_cache_bytes(q, 32768) / plain(q, 32768)
+    full_share = q["attn_layers"]["full"] / q["num_layers"]
+    grow = kv_cache_bytes(g, 65536) - kv_cache_bytes(g, 32768)
+    full_grow = 2 * g["attn_layers"]["full"] * g["global_kv_heads"] * g["global_head_dim"] * 32768 * 2
+    ok = abs(ratio - full_share) < 1e-9 and grow == full_grow
+    return ok, (f"Qwen3.8-27B 32k KV {kv_cache_bytes(q, 32768) / 2**30:.2f}GB (전체 레이어로 보면 {plain(q, 32768) / 2**30:.2f}GB, "
+                f"비율 {ratio:.2f} = 전체 어텐션 {q['attn_layers']['full']}/{q['num_layers']}), "
+                f"Gemma4-31B 32k {kv_cache_bytes(g, 32768) / 2**30:.2f}GB (전체로 보면 {plain(g, 32768) / 2**30:.2f}GB), 32k→64k 증가분 = 전체 어텐션 레이어 몫")
 
 
 @check("F2010", "판정·속도 계산 (Qwen3-8B, RTX 3080, 컨텍스트 4096)")

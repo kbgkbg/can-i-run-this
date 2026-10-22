@@ -4,10 +4,10 @@
 
 | 항목 | 내용 |
 |---|---|
-| 출처 | Hugging Face Hub API `https://huggingface.co/api/models?pipeline_tag=text-generation&sort=downloads` |
+| 출처 | Hugging Face Hub API `https://huggingface.co/api/models?pipeline_tag=text-generation&sort=downloads`, 같은 주소의 `pipeline_tag=image-text-to-text`, 그리고 두 태그의 `sort=trendingScore` (원본 모델 30건) |
 | 세부 필드 | 레이어 수·KV 헤드·컨텍스트 길이: 각 모델 저장소의 `config.json` (`https://huggingface.co/{모델ID}/resolve/main/config.json`) |
 | 파라미터 수 | Hub API의 `safetensors.total` (safetensors 메타데이터 기준) |
-| 수집일 | 2026-10-21 (UTC 07:06, `models.json`의 `collected_at`) |
+| 수집일 | 2026-10-22 (UTC 00:08, `models.json`의 `collected_at`) |
 | 건수 | 다운로드순 목록 400건 중 150건 저장 |
 | 제외 기준 | 양자화 파생 저장소(이름에 GGUF/AWQ/GPTQ/FP8 등) 185건, safetensors 메타데이터 없음 11건, 테스트용 저장소 13건, 5천만 파라미터 미만 3건 |
 | 정보 부족 | gated 모델(Meta Llama, Google Gemma 등) 14건은 토큰 없이 `config.json`을 받을 수 없어 레이어 수 등이 `null` → 판정 시 "정보 부족" |

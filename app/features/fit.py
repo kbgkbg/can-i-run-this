@@ -3,6 +3,10 @@
 필요 메모리 = 가중치 + KV 캐시 + 오버헤드
 - 가중치 = 파라미터 수 × 양자화 bpw ÷ 8                      (파라미터 수: [근거 1] 모델 메타데이터)
 - KV 캐시 = 2(K,V) × 레이어 수 × KV 헤드 수 × 헤드 차원 × 컨텍스트 × 원소 바이트 (레이어·헤드: [근거 1])
+  config에 레이어별 어텐션 종류(layer_types)가 있으면 종류별로 나눈다 (Qwen3.5+, Gemma 4 등 하이브리드 구조).
+  · 전체 어텐션 레이어: 컨텍스트 전체 × (전역 KV 헤드 수 × 전역 헤드 차원이 따로 있으면 그 값)
+  · sliding 레이어: min(컨텍스트, sliding_window) 토큰만
+  · 선형 어텐션 레이어: 컨텍스트와 무관한 고정 상태라 0으로 둔다 (수십 MB 수준, 오버헤드 몫에 포함된다고 본다)
 - 오버헤드 = (가중치 + KV 캐시) × overhead_ratio            (가정값, config.yaml)
 판정 4단계: GPU에 전부 올라감 / 일부 CPU 오프로딩 필요 / CPU·RAM만으로 가능(느림) / 불가
 모든 결과는 공식으로 낸 "계산값"이며 실제 런타임(llama.cpp, Ollama 등)에 따라 달라진다.
@@ -71,12 +75,46 @@ def head_dim(model: dict[str, Any]) -> int | None:
     return None
 
 
-def kv_cache_bytes(model: dict[str, Any], context: int) -> float | None:
+def _kv_parts(model: dict[str, Any]) -> tuple[float, float, int] | None:
+    """(컨텍스트 토큰당 늘어나는 바이트, sliding 레이어의 토큰당 바이트, sliding_window)"""
     hd = head_dim(model)
     if not (model.get("num_layers") and model.get("num_kv_heads") and hd):
         return None
     elem = get_config()["hardware"]["kv_cache_bytes"]
-    return 2 * model["num_layers"] * model["num_kv_heads"] * hd * context * elem
+    layers = model.get("attn_layers")
+    if not layers:
+        return 2 * model["num_layers"] * model["num_kv_heads"] * hd * elem, 0.0, 0
+    full_heads = model.get("global_kv_heads") or model["num_kv_heads"]
+    full_hd = model.get("global_head_dim") or hd
+    full = 2 * layers.get("full", 0) * full_heads * full_hd * elem
+    window = model.get("sliding_window") or 0
+    sliding = 2 * layers.get("sliding", 0) * model["num_kv_heads"] * hd * elem if window else 0.0
+    if layers.get("sliding") and not window:  # 창 크기를 모르면 전체 어텐션처럼 센다 (보수적)
+        full += 2 * layers["sliding"] * model["num_kv_heads"] * hd * elem
+    return full, sliding, window
+
+
+def kv_cache_bytes(model: dict[str, Any], context: int) -> float | None:
+    parts = _kv_parts(model)
+    if parts is None:
+        return None
+    full, sliding, window = parts
+    return full * context + sliding * min(context, window)
+
+
+def kv_layout_text(model: dict[str, Any]) -> str | None:
+    """하이브리드 어텐션 구조 설명 (화면·계산값 블록용). 일반 구조면 None."""
+    layers = model.get("attn_layers")
+    if not layers or set(layers) == {"full"}:
+        return None
+    names = {"full": "전체 어텐션", "sliding": "sliding", "linear": "선형 어텐션"}
+    parts = [f"{names.get(k, k)} {v}" for k, v in layers.items()]
+    rule = ["KV 캐시는 전체 어텐션 레이어만 컨텍스트에 비례"]
+    if layers.get("sliding") and model.get("sliding_window"):
+        rule.append(f"sliding 레이어는 최근 {model['sliding_window']:,} 토큰만")
+    if layers.get("linear"):
+        rule.append("선형 어텐션 레이어는 고정 크기 상태라 제외")
+    return f"레이어 구성: {' / '.join(parts)} → " + ", ".join(rule)
 
 
 def _verdict(total: float, hw: Hardware, ram_budget: float) -> tuple[str, float | None]:
@@ -101,12 +139,21 @@ def _verdict(total: float, hw: Hardware, ram_budget: float) -> tuple[str, float 
 def max_context_on_gpu(model: dict[str, Any], bpw: float, hw: Hardware) -> int | None:
     """GPU 메모리에 전부 올리면서 쓸 수 있는 최대 컨텍스트 (KV 캐시를 뺀 남는 공간으로 역산)."""
     cfg = get_config()["hardware"]
-    per_token = kv_cache_bytes(model, 1)
-    if not per_token or not hw.gpu_mem_gb:
+    parts = _kv_parts(model)
+    if not parts or not hw.gpu_mem_gb:
         return None
+    per_token, sliding, window = parts
     weights = model["params"] * bpw / 8
     budget = hw.gpu_mem_gb * GIB / (1 + cfg["overhead_ratio"]) - weights
-    return int(budget // per_token) if budget > 0 else 0
+    if budget <= 0:
+        return 0
+    if sliding and budget > sliding * window:  # sliding 몫이 창 크기에서 멈춘 뒤 남는 공간을 전체 어텐션 레이어가 쓴다
+        budget -= sliding * window
+    elif sliding:
+        return int(budget // (per_token + sliding))
+    if not per_token:  # 컨텍스트에 비례하는 KV가 없음 (모두 선형·sliding)
+        return model.get("max_context") or 0
+    return int(budget // per_token)
 
 
 def assess(model: dict[str, Any], hw: Hardware, context: int | None = None) -> FitReport:
@@ -121,6 +168,8 @@ def assess(model: dict[str, Any], hw: Hardware, context: int | None = None) -> F
     if kv is None:
         report.missing += [name for key, name in (("num_layers", "레이어 수"), ("num_kv_heads", "KV 헤드 수"))
                            if not model.get(key)] or ["헤드 차원"]
+    if kv_layout_text(model):
+        report.notes.append(kv_layout_text(model) + " ([근거 1] 레이어 구성으로 계산).")
     if model.get("num_experts"):
         report.notes.append("MoE 모델: 메모리에는 전체 전문가 가중치가 모두 올라가야 하므로 전체 파라미터로 계산했습니다.")
 
@@ -189,6 +238,23 @@ def calc_text(model: dict[str, Any], hw: Hardware, report: FitReport, speeds: di
         lines.append(f"- {r.quant} (bpw {r.bpw}): 가중치 {r.weights_gb:.1f} GB + KV {r.kv_gb:.2f} GB + 오버헤드 "
                      f"{r.overhead_gb:.1f} GB = {r.total_gb:.1f} GB -> {r.verdict}{sp}")
     lines += [f"대안: {a}" for a in report.alternatives]
+    lines += report.notes
+    return "\n".join(lines)
+
+
+def memory_text(model: dict[str, Any], context: int | None = None) -> str:
+    """하드웨어를 아직 고르지 않았을 때의 [계산값] 블록: 판정 없이 양자화별 필요 메모리만."""
+    cfg = get_config()["hardware"]
+    context = context or cfg["default_context"]
+    nohw = Hardware(kind="cpu", cpu_name="", cpu_cores=None, ram_gb=0.0)
+    report = assess(model, nohw, context)
+    lines = [f"하드웨어 미선택: 실행 가능 판정·속도는 없고 필요 메모리만 계산했습니다 (컨텍스트 {context:,}).",
+             f"계산식: 필요 메모리 = 파라미터 수 × bpw ÷ 8 + KV 캐시 + 오버헤드 {cfg['overhead_ratio']:.0%}. "
+             "파라미터 수·레이어 수·KV 헤드 수는 [근거 1] 값."]
+    if report.missing:
+        lines.append(f"정보 부족: {', '.join(report.missing)}이(가) 메타데이터에 없어 계산할 수 없습니다.")
+    lines += [f"- {r.quant} (bpw {r.bpw}): 가중치 {r.weights_gb:.1f} GB + KV {r.kv_gb:.2f} GB + 오버헤드 "
+              f"{r.overhead_gb:.1f} GB = {r.total_gb:.1f} GB" for r in report.rows if r.total_gb is not None]
     lines += report.notes
     return "\n".join(lines)
 

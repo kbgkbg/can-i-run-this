@@ -24,9 +24,11 @@ llm:
 
 # 데이터 수집 (F2001)
 fetch_models:
-  pipeline_tag: text-generation
+  # 최신 Qwen3.5+·Gemma 4 등은 멀티모달이라 image-text-to-text로만 분류된다 (fetch_models.py 설명)
+  pipeline_tags: [text-generation, image-text-to-text]
   sort: downloads
   target_count: 150          # 명세 조건: 약 100건 이상
+  trending_count: 30         # 그중 최근 뜨는 원본 모델(sort=trendingScore)로 먼저 채울 몫
 
 # 외부 문서 수집 (F2003~F2004)
 collect:

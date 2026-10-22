@@ -40,18 +40,18 @@ if case in ("normal", "wrongkey"):
     out["exception"] = len(at.exception)
     if case == "normal":
         at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-4B").run()
-        out["messages_4b"] = len(at.chat_message)
+        out["messages_4b"] = [c.name for c in at.chat_message]
         at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-8B").run()
         out["messages_8b_back"] = len(at.chat_message)
 if case == "ctx":
-    # 회귀: 컨텍스트를 32k로 올린 뒤 최대 4k 모델로 바꾸면 위젯 값이 최댓값을 넘어 예외가 났다
+    # 회귀: 컨텍스트를 32k로 올린 뒤 최대 컨텍스트가 작은 모델(TinyLlama 2k)로 바꾸면 위젯 값이 최댓값을 넘어 예외가 났다
     from app.data_prep.hw_tables import by_name
     at.sidebar.selectbox(key="side_nv_gpu").set_value(by_name("RTX 3080")).run()
     at.sidebar.button(key="side_nv_apply").click().run()
     at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-8B").run()
     at.number_input(key="context::Qwen/Qwen3-8B").set_value(32768).run()
-    at.sidebar.selectbox(key="model_id").select("utter-project/EuroLLM-1.7B-Instruct").run()
-    out["small_ctx"] = at.number_input(key="context::utter-project/EuroLLM-1.7B-Instruct").value
+    at.sidebar.selectbox(key="model_id").select("TinyLlama/TinyLlama-1.1B-Chat-v1.0").run()
+    out["small_ctx"] = at.number_input(key="context::TinyLlama/TinyLlama-1.1B-Chat-v1.0").value
     at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-8B").run()
     out["restored_ctx"] = at.number_input(key="context::Qwen/Qwen3-8B").value
     out["exception"] = len(at.exception)
@@ -90,6 +90,19 @@ if case == "onboarding":
     out["ctx_table"] = any("컨텍스트 길이별 차이" in e.label for e in at.expander)
     out["ctx_rows"] = len(at.dataframe[1].value) if len(at.dataframe) > 1 else 0
     out["exception"] = len(at.exception)
+if case == "welcome":
+    # 아직 문서를 수집하지 않은 모델: 안내 말풍선·첫 질문 안내가 보이고, 예시 질문 버튼으로 질문이 처리된다
+    from app.collect import cache
+    mid = next(i for i in ("Qwen/Qwen3.5-2B", "Qwen/Qwen3.5-0.8B", "HuggingFaceTB/SmolLM3-3B") if not cache.indexed_docs(i))
+    at.sidebar.selectbox(key="model_id").select(mid).run()
+    out["model"] = mid
+    out["welcome"] = [c.name for c in at.chat_message]
+    out["first_notice"] = any("처음 질문하면" in c.value for c in at.caption)
+    at.button(key="example::권장 샘플링 설정은?").click().run()
+    out["status"] = [s.label for s in at.status]
+    out["after"] = [c.name for c in at.chat_message]
+    out["question"] = [mk.value for c in at.chat_message if c.name == "user" for mk in c.markdown][:1]
+    out["exception"] = len(at.exception)
 print("@@" + json.dumps(out, ensure_ascii=False))
 '''
 
@@ -105,8 +118,8 @@ def main() -> int:
     rows = []
     n = run_case("normal")
     rows.append(("F2009", "모델별 대화 분리: 8B에서 질문 → 4B 전환 → 8B 복귀",
-                 n.get("messages_8b") == 2 and n.get("messages_4b") == 0 and n.get("messages_8b_back") == 2,
-                 f"8B 메시지 {n.get('messages_8b')} → 4B {n.get('messages_4b')} → 8B {n.get('messages_8b_back')}"))
+                 n.get("messages_8b") == 2 and n.get("messages_4b") == ["assistant"] and n.get("messages_8b_back") == 2,
+                 f"8B 메시지 {n.get('messages_8b')} → 4B {n.get('messages_4b')} (안내 말풍선만) → 8B {n.get('messages_8b_back')}"))
     rows.append(("F2008", "답변 아래에 실제 인용된 근거만 원문 링크와 표시", bool(n.get("cited")),
                  "; ".join(n.get("cited", []))[:150]))
     rows.append(("F2012", "진행 상태 표시 후 완료로 바뀜", "답변 완료" in n.get("status", []), f"status={n.get('status')}"))
@@ -120,13 +133,19 @@ def main() -> int:
                  w.get("exception") == 0 and any("API 키" in a for a in w.get("assistant", [])), (w.get("assistant") or [""])[0][:80]))
 
     c = run_case("ctx")
-    rows.append(("F2010", "컨텍스트 32k 설정 후 4k 모델로 전환해도 예외 없음, 돌아오면 값 복원",
-                 c.get("exception") == 0 and c.get("small_ctx") == 4096 and c.get("restored_ctx") == 32768,
+    rows.append(("F2010", "컨텍스트 32k 설정 후 최대 2k 모델로 전환해도 예외 없음, 돌아오면 값 복원",
+                 c.get("exception") == 0 and c.get("small_ctx") == 2048 and c.get("restored_ctx") == 32768,
                  f"전환 후 {c.get('small_ctx')}, 복귀 후 {c.get('restored_ctx')}, 예외 {c.get('exception')}"))
     pc = run_case("persona")
     rows.append(("F2010", "🎭 흉내 답변: 근거 답변과 별도 말풍선, 연기 안내, 바뀐 수치 비교 표시",
                  pc.get("exception") == 0 and pc.get("names", [])[-1:] == ["🎭"] and pc.get("notice") and bool(pc.get("changes")),
                  f"말풍선 {pc.get('names')}, 안내={pc.get('notice')}, 변경={str(pc.get('changes'))[:90]}"))
+    wl = run_case("welcome")
+    rows.append(("F2009", "빈 대화: 안내 말풍선과 첫 질문 소요 안내, 예시 질문 버튼으로 바로 질문",
+                 wl.get("exception") == 0 and wl.get("welcome") == ["assistant"] and wl.get("first_notice")
+                 and wl.get("after") == ["user", "assistant"] and any("첫 질문" in x for x in wl.get("status", [])),
+                 f"{wl.get('model')}: 질문 전 {wl.get('welcome')}, 첫 질문 안내={wl.get('first_notice')}, "
+                 f"진행 상태 {str(wl.get('status'))[:60]} → 질문 {wl.get('question')} 후 {wl.get('after')}"))
     cs = run_case("consult")
     rows.append(("F2011", "추천 상담: 되묻기 1회 후 검색, 대화 속 하드웨어 적용, 카드 클릭 시 대화로 전환",
                  cs.get("exception") == 0 and bool(cs.get("cards")) and cs.get("hw") == "RTX 3080"

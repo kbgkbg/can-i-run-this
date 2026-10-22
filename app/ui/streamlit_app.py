@@ -22,7 +22,7 @@ from app.config import get_config, missing_required_env  # noqa: E402
 from app.data_prep.hw_tables import load_specs  # noqa: E402
 from app.data_prep.item_text import format_params, load_models  # noqa: E402
 from app.features import hw_detect  # noqa: E402
-from app.features.fit import FitReport, assess, calc_text, context_sweep, max_context_on_gpu  # noqa: E402
+from app.features.fit import FitReport, assess, calc_text, context_sweep, max_context_on_gpu, memory_text  # noqa: E402
 from app.features.hw_detect import Hardware  # noqa: E402
 from app.features import consult, persona  # noqa: E402
 from app.features.recommend import Recommendation, search as recommend_search  # noqa: E402
@@ -36,6 +36,18 @@ log = get_logger("ui")
 st.set_page_config(page_title="Can I run this model?", page_icon="🖥️", layout="wide")
 
 MODE_ASK, MODE_CONSULT = "모델에게 묻기", "추천 상담"
+FIRST_ASK_NOTICE = ("⏳ 이 모델에 처음 질문하면 Hugging Face·위키백과·arXiv에서 근거 문서를 찾아 모으느라 "
+                    "수십 초 걸릴 수 있습니다. 같은 모델의 다음 질문부터는 모아 둔 문서를 다시 써서 빨라집니다.")
+EXAMPLE_QUESTIONS = ["Q4로 돌리면 메모리 얼마나 필요해?", "권장 샘플링 설정은?", "상업적으로 써도 돼?"]
+# 질문 입력창이 화면 아래에서 잘 안 보여 말풍선처럼 테두리·그림자로 구분한다 (모드 공통)
+CHAT_INPUT_CSS = """<style>
+[data-testid="stChatInput"] {
+  border: 2px solid var(--primary-color, #ff4b4b);
+  border-radius: 1.4rem;
+  box-shadow: 0 4px 16px rgba(255, 75, 75, 0.22);
+}
+[data-testid="stChatInput"]:focus-within { box-shadow: 0 4px 22px rgba(255, 75, 75, 0.38); }
+</style>"""
 VERDICT_ICON = {"GPU에 전부 올라감": "🟢", "일부 CPU 오프로딩 필요": "🟡", "CPU·RAM만으로 가능(느림)": "🟠", "불가": "🔴", "정보 부족": "⚪"}
 
 
@@ -412,9 +424,36 @@ def render_persona(pa: dict, stream_tok_s: float | None = None) -> None:
             st.markdown("\n".join(changes) or "바꾼 내용이 없습니다 (큰 체급).")
 
 
-def handle_question(m: dict, question: str, calc: str) -> dict:
-    with st.status("질문을 처리하는 중...", expanded=True) as status:
-        result = ask(m, question, calc=calc, on_step=lambda stage, text: st.write(f"**{stage}** · {text}"))
+def first_question(m: dict) -> bool:
+    """이 모델의 문서를 아직 하나도 수집하지 않았는지 (첫 질문은 수집 때문에 오래 걸린다)."""
+    return not cache.indexed_docs(m["id"])
+
+
+def welcome(m: dict) -> None:
+    """대화가 비어 있을 때: 어디에 무엇을 물으면 되는지 말풍선으로 안내하고 예시 질문을 버튼으로 준다."""
+    with st.chat_message("assistant"):
+        st.markdown(f"**{md_escape(m['name'])}**에 대해 물어보세요. 화면 아래 💬 **질문 입력창**에 쓰거나 예시를 눌러도 됩니다.")
+        cols = st.columns(len(EXAMPLE_QUESTIONS))
+        for col, q in zip(cols, EXAMPLE_QUESTIONS):
+            col.button(q, key=f"example::{q}", width="stretch",
+                       on_click=lambda q=q: st.session_state.__setitem__("pending_question", q))
+        if first_question(m):
+            st.caption(FIRST_ASK_NOTICE)
+
+
+def history_for_prompt(history: list[dict], turns: int = 3) -> list[tuple[str, str]]:
+    """같은 모델과의 최근 대화 (오류 답변 제외). 이어지는 질문("그럼 Q5는?")을 이해하는 데 쓴다."""
+    msgs = [(x["role"], x["content"]) for x in history if x["role"] in ("user", "assistant") and not x.get("error")]
+    return msgs[-turns * 2:]
+
+
+def handle_question(m: dict, question: str, calc: str, history: list[tuple[str, str]] | None = None) -> dict:
+    first = first_question(m)
+    label = "질문을 처리하는 중... (이 모델의 첫 질문이라 근거 문서를 모으고 있어 시간이 더 걸립니다)" \
+        if first else "질문을 처리하는 중..."
+    with st.status(label, expanded=True) as status:
+        result = ask(m, question, calc=calc, history=history,
+                     on_step=lambda stage, text: st.write(f"**{stage}** · {text}"))
         c = result.collect
         if c is not None:
             if c.cache_hit:
@@ -422,7 +461,8 @@ def handle_question(m: dict, question: str, calc: str) -> dict:
             elif c.fetched:
                 st.write("새로 수집한 문서: " + ", ".join(d.title for d in c.fetched))
         if result.ok:
-            status.update(label="답변 완료", state="complete", expanded=False)
+            done = "답변 완료" + (f" · 첫 질문이라 근거 문서 수집 포함 {sum(result.timings.values()):.0f}초" if first else "")
+            status.update(label=done, state="complete", expanded=False)
         else:
             status.update(label="답변을 만들지 못했습니다", state="error", expanded=False)
 
@@ -541,6 +581,7 @@ def render_consult_message(msg: dict, idx: int) -> None:
 
 
 def main() -> None:
+    st.html(CHAT_INPUT_CSS)
     st.title("Can I run this model?")
     st.caption("로컬 LLM 실행 가능성·양자화·라이선스를 모델 메타데이터와 모델 카드 근거로 답합니다.")
     models = preflight()
@@ -564,19 +605,25 @@ def main() -> None:
         report, speeds = fit_card(m, hw)
         calc = calc_text(m, hw, report, {q: s.tok_s for q, s in speeds.items()})
     else:
+        calc = memory_text(m)  # 사양을 안 골라도 "Q4면 메모리 얼마나?"에는 계산값으로 답한다
         st.info("위에서 내 PC 사양을 고르거나 사이드바에서 하드웨어를 감지하면 이 모델의 실행 가능 판정이 표시됩니다.")
 
     history = chats().setdefault(m["id"], [])  # 대화 기록은 모델별로 분리 (F2009)
+    # 입력창은 화면 아래에 고정되므로 먼저 받아도 위치는 같다. 질문이 들어온 실행에서는 안내 말풍선을 그리지 않는다
+    typed = st.chat_input(f"💬 {m['name']}에 대해 질문하세요 (예: Q4로 돌리면 메모리 얼마나 필요해?)")
+    question = typed or st.session_state.pop("pending_question", None)
     for msg in history:
         render_message(msg)
+    if not history and not question:
+        welcome(m)
 
     stream_tok_s, persona_quant = experience_controls(m, report, speeds)
-    question = st.chat_input(f"{m['name']}에 대해 질문하세요 (예: Q4로 돌리면 메모리 얼마나 필요해?)")
     if question:
+        prior = history_for_prompt(history)
         user_msg = {"role": "user", "content": question}
         history.append(user_msg)
         render_message(user_msg)
-        reply = handle_question(m, question, calc)
+        reply = handle_question(m, question, calc, prior)
         if persona_quant:
             add_persona(m, persona_quant, question, reply)
         history.append(reply)

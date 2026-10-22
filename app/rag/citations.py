@@ -34,7 +34,8 @@ def invalid_citations(answer: str, evidence: list[Evidence]) -> list[int]:
 
 
 # 문장 속 독립된 수치 (앞뒤가 영문자가 아닌 숫자). "Qwen3", "8B" 같은 이름 일부는 빼고 "0.6", "40,960", "36조"는 잡는다.
-_NUM = re.compile(r"(?<![A-Za-z0-9.])\d+(?:[.,]\d+)*(?![A-Za-z\d])")
+# 뒤에 단위 글자가 붙은 수("8B", "180.0B")는 건너뛴다. "180.0B"에서 소수부를 버리고 "180"만 뽑지 않도록 [.,]숫자도 막는다
+_NUM = re.compile(r"(?<![A-Za-z0-9.])\d+(?:[.,]\d+)*(?![A-Za-z\d]|[.,]\d)")
 
 
 def _norm_numbers(text: str) -> str:
@@ -66,3 +67,45 @@ def unverified_numbers(answer: str, evidence: list[Evidence], calc: str = "") ->
         if missing:
             problems.append(f"{line.strip()[:60]} (근거에 없는 수치: {', '.join(missing)})")
     return problems
+
+
+# "수백 GPU 시간", "몇십 배"처럼 숫자 없이 크기를 말하는 표현도 근거 없는 수치로 본다
+_KO_AMOUNT = re.compile(r"(?:수|몇)\s*(?:십|백|천|만|억)|\d*\s*배\s*(?:빠|느|많|적|크|작)")
+
+
+def strip_general_numbers(answer: str, label: str) -> tuple[str, list[str]]:
+    """일반 지식 소제목 아래에서 수치가 든 문장을 뺀다. (정리된 답변, 뺀 문장 목록)
+
+    이 부분은 근거가 없어 수치 검증을 할 수 없는데, 프롬프트로 금지해도 "보통 수백 GPU 시간" 같은
+    지어낸 수치가 들어와서 코드로 막는다. 양자화 이름(Q4_K_M)·모델 크기(8B)는 _NUM이 수치로 보지 않고,
+    어림셈 공식(× ÷ ≈가 든 문장)은 남긴다.
+    """
+    head, sep, general = answer.partition(label)
+    if not sep:
+        return answer, []
+    removed: list[str] = []
+    kept_lines = []
+    in_code = False
+    for line in general.splitlines():
+        if line.strip().startswith("```"):
+            in_code = not in_code
+        if in_code or line.strip().startswith("```"):
+            kept_lines.append(line)
+            continue
+        parts = re.split(r"(?<=[.!?])\s+", line)
+        keep = []
+        for sent in parts:
+            has_number = _NUM.findall(_norm_numbers(sent)) or _KO_AMOUNT.search(sent)
+            if has_number and not re.search(r"[×÷≈]", sent):
+                removed.append(sent.strip())
+            else:
+                keep.append(sent)
+        text = " ".join(keep)
+        if text.strip() in ("-", "*") or (line.strip() and not text.strip()):
+            continue
+        kept_lines.append(text)
+    body = "\n".join(kept_lines)
+    # 소제목 장식(**)만 남고 내용이 없으면 소제목째 뺀다
+    if not re.sub(r"[*\s]", "", body):
+        return head.rstrip().rstrip("*").rstrip(), removed
+    return head + sep + body, removed

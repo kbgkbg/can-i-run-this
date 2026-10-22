@@ -49,15 +49,18 @@ streamlit run app/ui/streamlit_app.py
 2. 처음 열면 **내 PC 사양 선택** 화면이 나온다: 자동 감지(NVIDIA·Apple Silicon) 또는 탭에서 직접 선택
    — **🍎 Mac**(칩·통합 메모리·GPU 사용 비율) / **🟩 NVIDIA**(GPU·시스템 RAM) / **💻 GPU 없음**(RAM). 사이드바에서 언제든 변경
 3. 판정 카드에서 양자화별 필요 메모리·판정·추정 속도 확인, 컨텍스트 길이 조절, **📏 컨텍스트 길이별 차이** 표 (2k ~ 모델 최대)
-4. 채팅으로 질문. **내 PC 속도로 체험**을 켜면 답변이 추정 tok/s 속도로 흘러나온다 (오프로딩 판정이어도 GPU·RAM 분담 속도로 재생)
+4. 채팅으로 질문 (화면 아래 💬 입력창, 또는 안내 말풍선의 예시 질문 버튼). 같은 모델과의 대화를 이어 받아 "그럼 Q5는?" 같은 후속 질문도 이해한다.
+   근거로 확인되는 내용은 [근거 n]으로, 문서에 없는 부분은 "💡 일반적인 경우 (근거 문서 아님)"으로 구분해 답한다.
+   ⏳ 모델마다 **첫 질문은 근거 문서를 모으느라 수십 초** 걸릴 수 있고(측정 예: Qwen3.8-Flash-Next 첫 질문 약 18초, 두 번째 약 9초), 다음 질문부터 빨라진다.
+   **내 PC 속도로 체험**을 켜면 답변이 추정 tok/s 속도로 흘러나온다 (오프로딩 판정이어도 GPU·RAM 분담 속도로 재생)
 5. **🎭 이 모델 흉내 답변**을 켜면 근거 답변 아래에 그 모델 체급이 근거 없이 답했다면 어땠을지 연기한 답이 붙는다
    (실제 모델 출력 아님. 호스팅 추론 비용 없이 같은 LLM으로 연기하며, 바뀐 수치를 함께 보여 준다)
 
 ### 검증·실험 스크립트
 | 명령 | 용도 |
 |---|---|
-| `python scripts/run_checks.py` | 요구사항 자동 점검 25항목 → `docs/eval/test_results.md` |
-| `python scripts/ui_checks.py` | 화면 점검 10항목 (첫 화면 사양 선택, 모델별 대화, 진행 상태, 키 누락·색인 0건·잘못된 키, 컨텍스트 전환 회귀, 흉내 답변, 추천 상담) → `docs/eval/ui_test_results.md` |
+| `python scripts/run_checks.py` | 요구사항 자동 점검 29항목 → `docs/eval/test_results.md` |
+| `python scripts/ui_checks.py` | 화면 점검 11항목 (첫 화면 사양 선택, 빈 대화 안내·예시 질문, 모델별 대화, 진행 상태, 키 누락·색인 0건·잘못된 키, 컨텍스트 전환 회귀, 흉내 답변, 추천 상담) → `docs/eval/ui_test_results.md` |
 | `python scripts/collect_demo.py "<모델ID>" "<질문>"` | 프롬프트 1 검색어, 후보, 프롬프트 2 선별/제외, 색인 결과, 캐시 사용 여부 |
 | `python scripts/ask_demo.py "<모델ID>" "<질문>" [--top-k N] [--search-type mmr]` | 근거 목록, 답변, 인용 근거, 수치 검증 경고 |
 | `python scripts/reindex_docs.py` | 수집한 원문을 현재 청크 설정으로 재색인 (청크 크기 변경 효과 비교) |
@@ -78,7 +81,7 @@ streamlit run app/ui/streamlit_app.py
 ### 필수 기능 (F2001 ~ F2012)
 | 번호 | 기능 | 구현 |
 |---|---|---|
-| F2001 | HF Hub text-generation 모델 150건 메타데이터(파라미터·레이어·KV 헤드·컨텍스트·라이선스·언어·태그)를 항목 텍스트 1개로 | `app/data_prep/fetch_models.py`, `item_text.py` |
+| F2001 | HF Hub text-generation·image-text-to-text(최신 멀티모달) 모델 150건(최근 뜨는 원본 모델 30건 포함) 메타데이터(파라미터·레이어·KV 헤드·컨텍스트·라이선스·언어·태그)를 항목 텍스트 1개로 | `app/data_prep/fetch_models.py`, `item_text.py` |
 | F2002 | `model_meta` 컬렉션, 항목당 1청크, 청크 ID = 모델 ID (재색인해도 건수 불변) | `app/index/`, `scripts/build_meta_index.py` |
 | F2003 | 프롬프트 1(로컬 LLM 배포 전문가): 질문 → 검색어 JSON 배열 | `app/rag/prompts.py`, `app/collect/collector.py` |
 | F2004 | 출처별 후보(제목+요약) → 프롬프트 2 선별 → 본문 수집. 선택 모델의 모델 카드는 항상 포함, 수집 캐시 | `app/collect/` |
@@ -105,7 +108,7 @@ streamlit run app/ui/streamlit_app.py
 
 ## 3. 데이터 준비 및 색인 절차
 
-1. `python -m app.data_prep.fetch_models` — HF Hub에서 다운로드순 text-generation 모델 목록을 받아 양자화 파생·테스트용 저장소를 거르고 150건의 `config.json`까지 읽어 `data/models.json`에 저장 (저장소에 2026-10-21 스냅샷 포함)
+1. `python -m app.data_prep.fetch_models` — HF Hub에서 text-generation·image-text-to-text 모델을 다운로드순으로, trendingScore 상위 원본 모델 30건을 먼저 받아 양자화 파생·테스트용 저장소를 거르고 150건의 `config.json`(레이어별 어텐션 종류 포함)까지 읽어 `data/models.json`에 저장 (저장소에 2026-10-22 스냅샷 포함). Qwen3.5 이후 Qwen, Gemma 4처럼 최신 모델은 멀티모달이라 image-text-to-text로만 분류된다
 2. `python scripts/build_meta_index.py` — 항목 텍스트를 임베딩해 `model_meta`에 upsert
 3. 외부 문서는 **질문할 때** 수집된다 (`model_docs`). 수집한 원문은 `data/cache/docs/`에 저장되어 같은 문서를 다시 받지 않고, 청크 설정을 바꾸면 `scripts/reindex_docs.py`로 재색인한다
 4. 하드웨어 사양표 `data/hw_specs.csv`는 제조사 공식 자료에서 확인한 값만 넣었다 (미확인 칸은 `TODO`)
@@ -145,6 +148,8 @@ docs/          요구사항 정의서, 설계문서, 검증 결과, eval/, scree
 ## 6. 알려진 한계
 
 - 🎭 흉내 답변은 **연기**다. 체급 구간과 실수 개수는 가정값이며 실제 모델의 지능·말투를 재현하지 않는다.
+- "💡 일반적인 경우 (근거 문서 아님)" 부분은 근거 검증을 하지 않는 일반 지식이다. 근거 없는 수치 문장은 코드로 빼지만 서술 자체가 틀릴 수 있다.
+- 멀티모달 모델은 이미지 입력용 비전 인코더까지 파라미터 수에 포함해 계산한다. 선형 어텐션 레이어의 고정 상태 메모리는 0으로 둔다.
 - 판정·속도는 공식으로 낸 **추정치(계산값)** 다. 효율·오버헤드 계수는 가정값이며 실측으로 보정해야 한다.
 - RTX 40 시리즈 대부분과 Apple M1의 메모리 대역폭은 공식 출처를 찾지 못해 `TODO` → 속도 추정을 생략한다.
 - gated 모델(Llama, Gemma 등)은 `HF_TOKEN` 없이는 레이어 수·모델 카드를 받을 수 없어 "정보 부족"으로 나온다.

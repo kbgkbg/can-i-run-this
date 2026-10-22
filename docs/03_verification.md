@@ -4,8 +4,8 @@
 
 | 증빙 | 내용 | 재현 명령 |
 |---|---|---|
-| [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 25항목 | `python scripts/run_checks.py` |
-| [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 10항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
+| [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 29항목 | `python scripts/run_checks.py` |
+| [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 11항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
 | [eval/mmr_comparison.md](eval/mmr_comparison.md) | 유사도 vs MMR 근거 비교 (F2014) | `python scripts/compare_mmr.py` |
 | [eval/rag_comparison.md](eval/rag_comparison.md) | RAG 사용 전후 답변 비교 (F2015) | `python scripts/compare_rag.py` |
 | [screenshots/](screenshots/) | 화면 캡처 10장 | Playwright로 실제 앱에서 촬영 |
@@ -27,6 +27,8 @@
 | F2010-5 | 모델 흉내 답변 (추가) | `features/persona.py` | 체급 구간, 연기 안내·바뀐 수치 표시 | 통과 | test_results F2010(체급), ui_test F2010(흉내), p10_02~03 |
 | F2010-6 | 컨텍스트 길이별 차이 (추가) | `fit.context_sweep`, UI | 컨텍스트 증가 시 KV·메모리 증가, 속도 감소 | 통과 | test_results F2010(컨텍스트), p11_02 |
 | F2010-7 | 첫 화면 사양 선택·Mac 분리 (추가) | `spec_picker`, `onboarding` | 첫 화면 표시, Mac 탭 적용 후 통합 메모리 판정 | 통과 | ui_test F2010(첫 화면), p11_01 |
+| F2010-8 | 하이브리드 어텐션 KV (추가) | `fit._kv_parts`, `fetch_models._attention_layout` | Qwen3.8-27B KV = 전체 레이어 몫 16/64, Gemma 4 32k→64k 증가분 = 전체 어텐션 몫 | 통과 | test_results F2010(하이브리드) |
+| F2009-2 | 대화형 답변·입력 안내 (추가) | `prompts.ANSWER_SYSTEM`, `strip_general_numbers`, `welcome` | 후속 "그럼 Q8_0은?"에 Q8_0 계산값, 일반 지식 수치 문장 제거, 빈 대화 안내·예시 버튼 질문 | 통과 | test_results F2007(대화형), ui_test F2009(빈 대화), p12_01~03 |
 | F2011 | 조건 기반 항목 탐색 | `features/recommend.py` | 조건 불일치 모델 미포함, 카드 클릭 → 대화 | 통과 | test_results F2011, p7_01 |
 | F2011-2 | 추천 상담 (추가) | `features/consult.py` | 되묻기 1회 후 검색, 대화 속 하드웨어 적용, 카드 → 대화 | 통과 | ui_test F2011(상담), test_results F2011(GPU 이름), p10_01 |
 | F2012 | 진행 상태 및 안내 | UI, `pipeline.py` | 진행 상태, 색인 0건·키 누락 안내, 면책 | 통과 | ui_test F2012, test_results F2012, p5_04, p7_02 |
@@ -111,7 +113,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 
 ## 3. 테스트 결과표
 
-자동 점검 25항목과 화면 점검 10항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
+자동 점검 29항목과 화면 점검 11항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
 
 추가로 개발 중 수동 확인한 비정상·경계 상황:
 
@@ -168,6 +170,9 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 | p10_03_persona_done.png | 흉내 답변 + 바뀐 수치 비교, 근거 답변의 수치 검증 경고 |
 | p11_01_onboarding_mac.png | 첫 화면 사양 선택 (Mac 탭: 칩·통합 메모리·GPU 비율) |
 | p11_02_context_table.png | 컨텍스트 길이별 차이 표 (M3 Max 40-core · 36GB, Qwen3-8B FP16: 2k 14.4 → 40k 10.7 tok/s) |
+| p12_01_welcome.png | 새 모델(Qwen3.8-27B) 선택 시 안내 말풍선·예시 질문 버튼·첫 질문 소요 안내, 강조된 질문 입력창 |
+| p12_02_conversation.png | 예시 질문 → 계산값 인용 + 일반적인 경우(근거 문서 아님) 대화형 답변 |
+| p12_03_followup.png | 후속 질문 "그럼 Q8로 하면 3090에 다 올라가?"를 이전 대화로 이해해 답변 |
 
 ## 6. 상호 체크리스트 (옆 교육생 점검용)
 

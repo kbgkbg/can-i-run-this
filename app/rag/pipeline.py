@@ -55,14 +55,17 @@ def _noop(stage: str, message: str) -> None:
     pass
 
 
-def ask(model: dict[str, Any], question: str, calc: str = "", on_step: StepCallback = _noop) -> AskResult:
+def ask(model: dict[str, Any], question: str, calc: str = "", on_step: StepCallback = _noop,
+        history: list[tuple[str, str]] | None = None) -> AskResult:
     result = AskResult()
     t0 = time.monotonic()
 
     # 1) 외부 문서 수집. 실패해도 이미 색인된 문서로 답을 이어간다.
     concept_queries: list[str] | None = None
     try:
-        result.collect = collect(model, question, on_step=on_step)
+        prev = [c for r, c in (history or []) if r == "user"]
+        search_q = f"{prev[-1]} {question}" if prev else question  # 짧은 후속 질문은 직전 질문과 함께 검색어를 뽑는다
+        result.collect = collect(model, search_q, on_step=on_step)
         concept_queries = result.collect.concept_queries
         result.warnings += result.collect.errors
     except Exception as e:  # noqa: BLE001 - 어떤 실패든 사용자 문구로 바꾸고 계속한다
@@ -75,7 +78,8 @@ def ask(model: dict[str, Any], question: str, calc: str = "", on_step: StepCallb
     state: dict[str, Any] = {}
     try:
         on_step("검색", "질문과 관련된 근거를 찾는 중")
-        inputs = {"model_id": model["id"], "question": question, "calc": calc, "concept_queries": concept_queries}
+        inputs = {"model_id": model["id"], "question": question, "calc": calc, "concept_queries": concept_queries,
+                  "history": history or []}
         for update in build_graph().stream(inputs, stream_mode="updates"):
             for node, values in update.items():
                 state.update(values)

@@ -21,8 +21,15 @@ MD_HEADERS = [("#", "h1"), ("##", "h2"), ("###", "h3")]
 
 
 def index_models(models: list[dict[str, Any]]) -> int:
-    """모델 메타데이터를 model_meta 컬렉션에 항목당 1청크로 upsert하고, 저장된 청크 수를 반환한다."""
+    """모델 메타데이터를 model_meta 컬렉션에 항목당 1청크로 upsert하고, 저장된 청크 수를 반환한다.
+
+    스냅샷을 새로 받으면 목록에서 빠진 모델이 생기므로, 스냅샷에 없는 청크는 지워 항목 수와 청크 수를 맞춘다.
+    """
     store = get_store(META_COLLECTION)
+    keep = {m["id"] for m in models}
+    stale = [i for i in store.get(include=[])["ids"] if i not in keep]
+    if stale:
+        store.delete(ids=stale)
     for start in range(0, len(models), BATCH_SIZE):
         batch = models[start:start + BATCH_SIZE]
         store.add_texts(

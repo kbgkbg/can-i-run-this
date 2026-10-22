@@ -72,12 +72,28 @@ def item_text(model: dict[str, Any]) -> str:
     # 글자 모양이 비슷한 빈 항목이 오히려 상위로 걸려서다.
     optional = [
         ("지원 언어", ", ".join(language_names(model))),
+        ("어텐션 레이어 구성", _attention_text(model)),
+        ("입력", "텍스트·이미지 (멀티모달)" if model.get("pipeline_tag") == "image-text-to-text" else ""),
         ("라이선스 원문", model.get("license_link") or ""),
         ("기반 모델", ", ".join(model.get("base_model") or [])),
         ("태그(용도)", ", ".join(usage_tags(model))),
     ]
     lines += [f"{label}: {value}" for label, value in optional if value]
     return "\n".join(lines)
+
+
+def _attention_text(model: dict[str, Any]) -> str:
+    """하이브리드 어텐션 레이어 구성 (일반 구조면 빈 문자열). KV 캐시 계산의 근거가 된다."""
+    layers = model.get("attn_layers")
+    if not layers or set(layers) == {"full"}:
+        return ""
+    names = {"full": "전체 어텐션", "sliding": "sliding 어텐션", "linear": "선형 어텐션"}
+    text = ", ".join(f"{names.get(k, k)} {v}개" for k, v in layers.items())
+    if layers.get("sliding") and model.get("sliding_window"):
+        text += f" (sliding 창 {model['sliding_window']:,} 토큰)"
+    if model.get("global_kv_heads"):
+        text += f", 전체 어텐션 KV 헤드 {model['global_kv_heads']}개 × 헤드 차원 {model.get('global_head_dim') or model.get('head_dim')}"
+    return text
 
 
 def item_metadata(model: dict[str, Any]) -> dict[str, Any]:
