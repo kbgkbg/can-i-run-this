@@ -108,6 +108,8 @@ persona:
 # 하드웨어 판정 / 속도 추정 (F2010)
 hardware:
   apple_gpu_mem_ratio: 0.7   # 통합 메모리 중 GPU가 쓸 수 있다고 보는 비율 (가정값, 조정 가능)
+  # DGX Spark 같은 Linux 통합 메모리 장치: macOS 같은 GPU 상한은 없고 OS·CPU 몫만 빼면 된다고 보고 더 높게 둔다 (가정값)
+  unified_gpu_mem_ratio: 0.9
   overhead_ratio: 0.10       # 가중치+KV 캐시 외 런타임 오버헤드 비율 (가정값, Phase 6에서 검토)
   # 추천 양자화의 최소 속도. GPU에 다 올라가도 이보다 느리면 더 낮은 양자화를 추천한다 (가정값: 대화로 쓸 만한 속도)
   usable_tok_s: 10

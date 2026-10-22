@@ -139,7 +139,7 @@ def spec_picker(prefix: str) -> None:
     """내 PC 사양 선택. Mac 사용자가 많아 Apple Silicon을 별도 탭으로 둔다 (통합 메모리라 입력 방식이 다르다)."""
     specs = load_specs()
     default_ram = int(round(psutil.virtual_memory().total / 1024 ** 3))
-    mac, nv, cpu = st.tabs(["🍎 Mac (Apple Silicon)", "🟩 NVIDIA GPU", "💻 GPU 없음"])
+    mac, nv, uni, cpu = st.tabs(["🍎 Mac (Apple Silicon)", "🟩 NVIDIA GPU", "🟪 통합 메모리 PC", "💻 GPU 없음"])
     with mac:
         chips = [x for x in specs if x.type == "apple"]
         chip = st.selectbox("칩", chips, key=f"{prefix}_mac_chip", format_func=lambda x: f"{x.name} · {_bw_label(x)}")
@@ -161,6 +161,17 @@ def spec_picker(prefix: str) -> None:
         nv_bw = _bandwidth_input(gpu, f"{prefix}_nv_bw")
         if st.button("NVIDIA 사양 적용", key=f"{prefix}_nv_apply", width="stretch"):
             st.session_state["hw"] = hw_detect.manual(gpu.name, ram, bandwidth_gbps=nv_bw).to_dict()
+            st.rerun()
+    with uni:
+        devices = [x for x in specs if x.type == "unified"]
+        dev = st.selectbox("장치", devices, key=f"{prefix}_uni_dev",
+                           format_func=lambda x: f"{x.name} · 통합 메모리 {x.vram_gb:g} GB · {_bw_label(x)}")
+        u_ratio = st.slider("GPU가 쓸 수 있는 메모리 비율", 0.5, 0.95, float(get_config()["hardware"]["unified_gpu_mem_ratio"]),
+                            0.05, key=f"{prefix}_uni_ratio",
+                            help="CPU와 GPU가 한 메모리를 나눠 씁니다. macOS 같은 GPU 상한은 없어 OS·앱 몫만 뺀다고 보고 기본값을 높게 둡니다 (가정값).")
+        st.caption(f"GPU 사용 가능 약 {(dev.vram_gb or 0) * u_ratio:.1f} GB로 판정합니다. 메모리 대역폭이 낮아 큰 모델은 올라가도 느릴 수 있습니다.")
+        if st.button("통합 메모리 PC 사양 적용", key=f"{prefix}_uni_apply", width="stretch"):
+            st.session_state["hw"] = hw_detect.manual(dev.name, dev.vram_gb or 0, u_ratio).to_dict()
             st.rerun()
     with cpu:
         ram_c = st.number_input("시스템 RAM (GB)", 1, 2048, default_ram, key=f"{prefix}_cpu_ram")
@@ -196,7 +207,7 @@ def hardware_panel() -> None:
     if hw is None:
         st.caption("하드웨어를 감지하거나 고르면 실행 가능 판정이 표시됩니다.")
         return
-    if hw.kind == "apple":
+    if hw.kind in ("apple", "unified"):
         st.caption(f"**{hw.gpu_name}** · 통합 메모리 {hw.ram_gb:.0f} GB (GPU 사용 {hw.gpu_mem_gb:.1f} GB)")
     elif hw.gpu_name:
         st.caption(f"**{hw.gpu_name}** · VRAM {hw.vram_gb:.1f} GB · RAM {hw.ram_gb:.0f} GB")

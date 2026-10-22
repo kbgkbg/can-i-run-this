@@ -296,6 +296,19 @@ def _():
     return t.hardware is None, f"하드웨어 {t.hardware.spec_name if t.hardware else None}"
 
 
+@check("F2010", "DGX Spark: 통합 메모리 128GB × 0.9(가정값)를 GPU 몫으로, 넘치면 같은 메모리에서 오프로딩, 대역폭 273GB/s")
+def _():
+    from app.features.fit import assess
+    from app.features.hw_detect import manual
+    hw = manual("NVIDIA DGX Spark", 16)  # 메모리는 사양표의 고정값(128GB)을 쓴다
+    big = assess(models["Qwen/Qwen3.8-Flash-Next"], hw)
+    fp16 = next(r for r in big.rows if r.quant == "FP16")
+    q8 = next(r for r in big.rows if r.quant == "Q8_0")  # 약 196 GB: 128GB 통합 메모리를 넘어 불가
+    ok = (hw.kind == "unified" and hw.ram_gb == 128 and hw.gpu_mem_gb == 115.2 and hw.bandwidth_gbps == 273
+          and fp16.verdict == "불가" and q8.verdict == "불가")
+    return ok, f"{hw.kind}, 메모리 {hw.ram_gb} GB, GPU 몫 {hw.gpu_mem_gb} GB, {hw.bandwidth_gbps} GB/s, Flash-Next FP16 {fp16.total_gb:.0f} GB → {fp16.verdict}"
+
+
 @check("F2011", "대화 속 GPU 이름 매칭 (줄임말·VRAM 구분)")
 def _():
     from app.data_prep.hw_tables import match_gpu

@@ -56,3 +56,4 @@ Apple M5,apple,,153,https://support.apple.com/en-us/125405,"통합 메모리. Ma
 Apple M5 Pro,apple,,307,https://support.apple.com/en-us/126318,"통합 메모리. MacBook Pro (14-inch, M5 Pro or M5 Max) 기술 사양: 16코어·20코어 GPU 모두 307GB/s"
 Apple M5 Max (32-core GPU),apple,,460,https://support.apple.com/en-us/126318,"통합 메모리. 같은 기술 사양 ""M5 Max with 18-core CPU and 32-core GPU (460GB/s memory bandwidth)"""
 Apple M5 Max (40-core GPU),apple,,614,https://support.apple.com/en-us/126318,"통합 메모리. 같은 기술 사양 ""M5 Max with 18-core CPU and 40-core GPU (614GB/s memory bandwidth)"""
+NVIDIA DGX Spark,unified,128,273,https://docs.nvidia.com/dgx/dgx-spark/hardware.html,"통합 메모리(CPU·GPU 공유). NVIDIA DGX Spark Hardware Overview: 128 GB LPDDR5x unified system memory, 256-bit, 273 GB/s. vram_gb 칸은 고정 통합 메모리 크기"

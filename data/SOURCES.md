@@ -45,6 +45,8 @@
 | 위키백과 List of Nvidia graphics processing units https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units | RTX 4080 SUPER ~ 4060, 3080 12GB, 3070 Ti, 3060 Ti, 3060(8/12GB), 3050, RTX 20 시리즈 대역폭. NVIDIA 공식 페이지는 버스 폭만 있어, 표의 메모리 속도 × 버스 폭 ÷ 8로 모두 검산. RTX 3060은 표의 대역폭 칸이 같은 표의 속도·버스 폭과 맞지 않아 계산값(360/240) 사용 |
 | AnandTech RTX 2080 Super 리뷰 https://www.anandtech.com/show/14663 , Notebookcheck RTX 2060 Super 리뷰 | 2080 SUPER 496 GB/s(15.5 Gbps), 2060 SUPER 448 GB/s(14 Gbps × 256-bit) |
 
+| NVIDIA DGX Spark Hardware Overview https://docs.nvidia.com/dgx/dgx-spark/hardware.html | DGX Spark 128 GB LPDDR5x 통합 메모리, 256-bit, 273 GB/s |
+
 **TODO:** 없음 (NVIDIA RTX 20~50, Apple M1~M5 전부 채움, 2026-10-22).
 Apple Silicon은 M1 ~ M5(기본·Pro·Max·Ultra) 전부 채움 (2026-10-22 재조사).
 

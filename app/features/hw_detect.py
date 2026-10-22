@@ -29,7 +29,7 @@ GIB = 1024 ** 3
 
 @dataclass
 class Hardware:
-    kind: str                         # nvidia | apple | cpu
+    kind: str                         # nvidia | apple | unified(DGX Spark 등) | cpu
     cpu_name: str
     cpu_cores: int | None
     ram_gb: float
@@ -122,6 +122,11 @@ def detect() -> Hardware:
     base = dict(cpu_name=_cpu_name(), cpu_cores=psutil.cpu_count(logical=False), ram_gb=round(ram_gb, 1))
 
     nv = _nvidia()
+    if nv and "GB10" in nv[0].upper():
+        # DGX Spark(GB10): 전용 VRAM이 아니라 통합 메모리라 NVIDIA GPU처럼 VRAM으로 판정하면 안 된다 (실기기 미검증)
+        hw = manual("NVIDIA DGX Spark", ram_gb)
+        hw.method = nv[2]
+        return hw
     if nv:
         name, vram, method = nv
         hw = Hardware(kind="nvidia", gpu_name=name, vram_gb=round(vram, 1), gpu_mem_gb=round(vram, 1), method=method, **base)
@@ -158,6 +163,13 @@ def manual(spec_name: str | None, ram_gb: float, apple_gpu_ratio: float | None =
     if spec.type == "apple":
         hw = Hardware(kind="apple", gpu_name=spec.name, gpu_mem_gb=round(ram_gb * ratio, 1), **base)
         hw.notes.append(f"통합 메모리: GPU 사용 가능량을 RAM × {ratio:g}로 계산했습니다.")
+    elif spec.type == "unified":
+        # DGX Spark: 메모리 크기가 정해져 있다(사양표 vram_gb 칸). 비율 기본값은 Mac과 따로 둔다
+        ratio = apple_gpu_ratio or cfg["unified_gpu_mem_ratio"]
+        mem = spec.vram_gb or float(ram_gb)
+        base["ram_gb"] = float(mem)
+        hw = Hardware(kind="unified", gpu_name=spec.name, gpu_mem_gb=round(mem * ratio, 1), **base)
+        hw.notes.append(f"통합 메모리 {mem:g} GB: GPU 사용 가능량을 × {ratio:g}로 계산했습니다 (가정값, OS·CPU 몫 제외).")
     else:
         hw = Hardware(kind=spec.type, gpu_name=spec.name, vram_gb=spec.vram_gb, gpu_mem_gb=spec.vram_gb or 0.0, **base)
     hw = _apply_spec(hw, spec)

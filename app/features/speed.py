@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.config import get_config
-from app.features.fit import CPU_ONLY, GPU_FULL, OFFLOAD, FitReport, QuantFit
+from app.features.fit import CPU_ONLY, GPU_FULL, OFFLOAD, UNIFIED_KINDS, FitReport, QuantFit
 from app.features.hw_detect import Hardware
 
 GB = 1e9  # 대역폭 GB/s는 10진 기준
@@ -60,13 +60,13 @@ def estimate(model: dict[str, Any], hw: Hardware, row: QuantFit) -> SpeedEstimat
     gpu_bw = hw.bandwidth_gbps * GB * eff
     if row.verdict == GPU_FULL:
         return SpeedEstimate(row.quant, gpu_bw / bytes_per_token, f"{basis}, GPU 대역폭 {hw.bandwidth_gbps:g} GB/s")
-    # 오프로딩: Apple은 같은 통합 메모리를 CPU가 읽으므로 칩 대역폭, 그 외는 시스템 RAM 대역폭
+    # 오프로딩: 통합 메모리 장치는 같은 메모리를 CPU가 읽으므로 칩 대역폭, 그 외는 시스템 RAM 대역폭
     frac = row.gpu_fraction or 0.0
-    cpu_bw = gpu_bw if hw.kind == "apple" else ram_bw * GB * eff
+    cpu_bw = gpu_bw if hw.kind in UNIFIED_KINDS else ram_bw * GB * eff
     seconds = bytes_per_token * frac / gpu_bw + bytes_per_token * (1 - frac) / cpu_bw
     return SpeedEstimate(row.quant, 1 / seconds,
                          f"{basis}, GPU {frac:.0%} / RAM {1 - frac:.0%} 분담"
-                         + ("" if hw.kind == "apple" else f" (RAM 대역폭 {ram_bw:g} GB/s 가정값)"))
+                         + ("" if hw.kind in UNIFIED_KINDS else f" (RAM 대역폭 {ram_bw:g} GB/s 가정값)"))
 
 
 def estimate_all(model: dict[str, Any], hw: Hardware, report: FitReport) -> dict[str, SpeedEstimate]:

@@ -20,6 +20,7 @@ from app.config import get_config
 from app.features.hw_detect import Hardware
 
 GIB = 1024 ** 3
+UNIFIED_KINDS = ("apple", "unified")  # CPU·GPU가 한 메모리를 나눠 쓰는 장치
 
 GPU_FULL = "GPU에 전부 올라감"
 OFFLOAD = "일부 CPU 오프로딩 필요"
@@ -128,8 +129,8 @@ def kv_layout_text(model: dict[str, Any]) -> str | None:
 def _verdict(total: float, hw: Hardware, ram_budget: float) -> tuple[str, float | None]:
     gpu = hw.gpu_mem_gb * GIB
     ram = ram_budget * GIB
-    if hw.kind == "apple":
-        # 통합 메모리: GPU 몫을 넘으면 같은 RAM에서 CPU가 나머지를 맡는다
+    if hw.kind in UNIFIED_KINDS:
+        # 통합 메모리(Mac, DGX Spark): GPU 몫을 넘으면 같은 메모리에서 CPU가 나머지를 맡는다
         if total <= gpu:
             return GPU_FULL, 1.0
         if total <= ram:
