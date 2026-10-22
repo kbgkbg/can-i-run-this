@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from typing import Any, TypedDict
 
@@ -14,7 +15,7 @@ from app.rag.citations import (NO_CITATION_NOTICE, cited_evidence, cited_numbers
                                unverified_numbers)
 from app.rag.intent import is_license_question
 from app.rag.llm import chat_model
-from app.rag.prompts import GENERAL_LABEL, LICENSE_DISCLAIMER, answer_messages
+from app.rag.prompts import GENERAL_LABEL, LICENSE_DISCLAIMER, NOT_FOUND, answer_messages
 from app.rag.retrieve import Evidence, retrieve
 
 log = get_logger("graph")
@@ -52,11 +53,20 @@ CALC_SOURCE_NOTE = ("(계산값은 [근거 1] 모델 메타데이터의 파라�
                     "메모리 대역폭으로 계산한 추정치이며, 실제 런타임과 설정에 따라 다를 수 있습니다.)")
 
 
+def _soften_not_found(answer: str) -> str:
+    """프롬프트로 막아도 나오는 고정 문구 "제공된 문서에서 확인되지 않습니다"를 대화체로 바꾼다."""
+    if NOT_FOUND not in answer:
+        return answer
+    answer = re.sub(rf"{NOT_FOUND}\.?", "찾아본 자료에는 이 내용이 나와 있지 않아요.", answer, count=1)
+    return re.sub(rf"\s*{NOT_FOUND}\.?", "", answer).strip()
+
+
 def generate_node(state: RAGState) -> dict[str, Any]:
     messages = answer_messages(state["model_id"], state["question"], evidence_block(state["evidence"]),
                                state.get("calc", ""), state.get("history"))
     answer = chat_model().invoke(messages).content
     answer = answer.replace("[계산값]", "(계산값)")  # 표기 통일: [ ]는 근거 번호 전용
+    answer = _soften_not_found(answer)
     answer, removed = strip_general_numbers(answer, GENERAL_LABEL)
     if removed:
         log.info("일반 지식 부분에서 근거 없는 수치 문장 제거: %s", removed)

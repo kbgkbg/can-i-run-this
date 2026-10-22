@@ -5,7 +5,7 @@
 | 증빙 | 내용 | 재현 명령 |
 |---|---|---|
 | [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 29항목 | `python scripts/run_checks.py` |
-| [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 11항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
+| [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 12항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
 | [eval/mmr_comparison.md](eval/mmr_comparison.md) | 유사도 vs MMR 근거 비교 (F2014) | `python scripts/compare_mmr.py` |
 | [eval/rag_comparison.md](eval/rag_comparison.md) | RAG 사용 전후 답변 비교 (F2015) | `python scripts/compare_rag.py` |
 | [screenshots/](screenshots/) | 화면 캡처 10장 | Playwright로 실제 앱에서 촬영 |
@@ -20,11 +20,11 @@
 | F2004 | 외부 문서 수집 (프롬프트 2) | `collect/` | 선별/제외 목록, 모델 카드 강제 포함, 캐시 | 통과 | `collect_demo.py` 출력, test_results F2004 |
 | F2005 | 외부 문서 색인 | `index/indexer.py` | 청크 ID 형식, 메타데이터 필드, 청크 크기 변경 시 청크 수 변화 | 통과 | test_results F2005, 4.2 |
 | F2006 | 근거 검색 및 병합 | `rag/retrieve.py` | [근거 1] 고정, Top-k 변경 시 근거 수 변화, 중복 없음 | 통과 | test_results F2006, 4.3 |
-| F2007 | 근거 기반 답변 (프롬프트 3) | `rag/graph.py` | 그래프 2노드, 없는 정보에 "확인되지 않습니다" | 통과 | test_results F2007 |
+| F2007 | 근거 기반 답변 (프롬프트 3) | `rag/graph.py` | 그래프 2노드, 없는 정보에 추측 수치 없이 "자료에 없다"고 대화체로 | 통과 | test_results F2007 |
 | F2008 | 근거 표시 | `rag/citations.py`, UI | 인용된 근거만, 없으면 안내, 근거 번호 일치 | 통과 | test_results F2008, ui_test F2008, p5_05 |
 | F2009 | 항목 선택 및 질의응답 | `ui/streamlit_app.py` | 모델 전환 시 대화 분리 | 통과 | ui_test F2009 (2 → 0 → 2), p5_02 |
 | F2010 | 도메인 특화 기능 | `features/` | 판정·속도 계산 검산, 근거·계산값 구분 표시 | 통과 | test_results F2010, p6_01~03 |
-| F2010-5 | 모델 흉내 답변 (추가) | `features/persona.py` | 체급 구간, 연기 안내·바뀐 수치 표시 | 통과 | test_results F2010(체급), ui_test F2010(흉내), p10_02~03 |
+| F2010-5 | 모델 흉내 답변 (추가) | `features/persona.py` | 체급 구간, 연기 안내, 켜면 연기 답변만 표시 | 통과 | test_results F2010(체급), ui_test F2010(흉내), p10_02~03 |
 | F2010-6 | 컨텍스트 길이별 차이 (추가) | `fit.context_sweep`, UI | 컨텍스트 증가 시 KV·메모리 증가, 속도 감소 | 통과 | test_results F2010(컨텍스트), p11_02 |
 | F2010-7 | 첫 화면 사양 선택·Mac 분리 (추가) | `spec_picker`, `onboarding` | 첫 화면 표시, Mac 탭 적용 후 통합 메모리 판정 | 통과 | ui_test F2010(첫 화면), p11_01 |
 | F2010-8 | 하이브리드 어텐션 KV (추가) | `fit._kv_parts`, `fetch_models._attention_layout` | Qwen3.8-27B KV = 전체 레이어 몫 16/64, Gemma 4 32k→64k 증가분 = 전체 어텐션 몫 | 통과 | test_results F2010(하이브리드) |
@@ -69,7 +69,7 @@
 | LangGraph retrieve·generate 두 노드 | `python -m app.rag.graph` → `__start__ → retrieve → generate → __end__` |
 | 답변의 근거 번호와 화면 근거 목록 일치 | 인용한 번호만 표시, 목록에 없는 번호는 버림 (p5_05: 항목마다 [근거 2], 목록에 [근거 2]만) |
 | 근거 목록에 메타데이터와 외부 문서 구분 | `(모델 메타데이터)`, `(HF 모델 카드)`, `(라이선스 원문)`, `(위키백과)`, `(arXiv PDF p.3)` |
-| 문서에 없는 것을 물으면 추측하지 않음 | "학습에 GPU 몇 시간?" → "제공된 문서에서 확인되지 않습니다." |
+| 문서에 없는 것을 물으면 추측하지 않음 | "학습에 GPU 몇 시간?" → "찾아본 자료에는 … 내용이 없어요. 이런 정보는 보통 기술 보고서에…" (지어낸 수치 없음) |
 | 인용 근거가 없을 때 안내 | "이 답변에는 인용된 근거가 없습니다." |
 
 ### 4.4 서비스 기능과 화면 (F2009 ~ F2012)
@@ -113,7 +113,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 
 ## 3. 테스트 결과표
 
-자동 점검 29항목과 화면 점검 11항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
+자동 점검 29항목과 화면 점검 12항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
 
 추가로 개발 중 수동 확인한 비정상·경계 상황:
 
@@ -167,12 +167,13 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 | p7_02_license.png | 라이선스 답변 (라이선스 원문 근거, 면책 안내) |
 | p10_01_consult.png | 추천 상담 (되묻기 → 대화 속 하드웨어로 판정이 붙은 카드) |
 | p10_02_persona_streaming.png | 🎭 흉내 답변을 추정 속도로 재생 |
-| p10_03_persona_done.png | 흉내 답변 + 바뀐 수치 비교, 근거 답변의 수치 검증 경고 |
+| p10_03_persona_done.png | 흉내 답변 + 바뀐 수치 비교 (이전 화면. 지금은 흉내 답변을 켜면 연기 답변만 보이고 비교 칸은 없앴다) |
 | p11_01_onboarding_mac.png | 첫 화면 사양 선택 (Mac 탭: 칩·통합 메모리·GPU 비율) |
 | p11_02_context_table.png | 컨텍스트 길이별 차이 표 (M3 Max 40-core · 36GB, Qwen3-8B FP16: 2k 14.4 → 40k 10.7 tok/s) |
 | p12_01_welcome.png | 새 모델(Qwen3.8-27B) 선택 시 안내 말풍선·예시 질문 버튼·첫 질문 소요 안내, 강조된 질문 입력창 |
 | p12_02_conversation.png | 예시 질문 → 계산값 인용 + 일반적인 경우(근거 문서 아님) 대화형 답변 |
 | p12_03_followup.png | 후속 질문 "그럼 Q8로 하면 3090에 다 올라가?"를 이전 대화로 이해해 답변 |
+| p13_01_persona_speed.png | 속도 체험 + 🎭 흉내 답변을 함께 켠 경우: 연기 답변만 추정 속도(52.7 tok/s)로 재생, 모서리를 고친 질문 입력창 |
 
 ## 6. 상호 체크리스트 (옆 교육생 점검용)
 
@@ -184,7 +185,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 | 2 | 모델을 골라 질문하면 진행 상태가 단계별로 보이고, 끝나면 수집 문서 제목이 나온다 | | |
 | 3 | 같은 질문을 다시 하면 "이미 수집된 문서 n건 사용"이 나온다 | | |
 | 4 | 답변의 [근거 n]과 화면의 근거 목록이 일치하고 원문 링크가 열린다 | | |
-| 5 | 문서에 없는 것을 물으면 "제공된 문서에서 확인되지 않습니다"라고 답한다 | | |
+| 5 | 문서에 없는 것을 물으면 지어내지 않고 자료에 없다고 대화체로 밝힌다 | | |
 | 6 | 다른 모델로 바꾸면 이전 대화가 보이지 않고, 돌아오면 다시 보인다 | | |
 | 7 | 하드웨어를 감지(또는 직접 입력)하면 판정 카드가 나오고 근거·계산값이 구분된다 | | |
 | 8 | "내 PC 속도로 체험"을 켜면 답변이 추정 속도로 재생된다 | | |

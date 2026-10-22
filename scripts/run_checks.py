@@ -131,10 +131,15 @@ def _():
     return nodes == ["retrieve", "generate"] and ("retrieve", "generate") in edges, f"노드 {nodes}, 엣지 {edges}"
 
 
-@check("F2007", "문서에 없는 질문에 추측하지 않고 '확인되지 않습니다'")
+@check("F2007", "문서에 없는 질문: 추측한 수치 없이 자료에 없다고 대화체로 밝힌다 (고정 문구 없음)")
 def _():
-    s = run(MODEL, "Qwen3-8B 학습에 GPU를 몇 시간 썼고 비용은 얼마였어?", concept_queries=[])
-    return NOT_FOUND in s["answer"], s["answer"][:80]
+    from app.rag.citations import _NUM, _norm_numbers
+    q = "Qwen3-8B 학습에 GPU를 몇 시간 썼고 비용은 얼마였어?"
+    s = run(MODEL, q, concept_queries=[])
+    a = s["answer"]
+    invented = [n for n in _NUM.findall(_norm_numbers(re.sub(r"\[근거 \d+\]", "", a))) if n not in q]
+    ok = NOT_FOUND not in a and "없" in a and not invented
+    return ok, f"고정 문구 {NOT_FOUND in a}, 지어낸 수치 {invented} | {a[:90]}"
 
 
 @check("F2008", "실제 인용된 근거만 표시, 인용이 없으면 안내")

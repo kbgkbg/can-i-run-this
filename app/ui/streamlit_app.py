@@ -41,12 +41,13 @@ FIRST_ASK_NOTICE = ("⏳ 이 모델에 처음 질문하면 Hugging Face·위키�
 EXAMPLE_QUESTIONS = ["Q4로 돌리면 메모리 얼마나 필요해?", "권장 샘플링 설정은?", "상업적으로 써도 돼?"]
 # 질문 입력창이 화면 아래에서 잘 안 보여 말풍선처럼 테두리·그림자로 구분한다 (모드 공통)
 CHAT_INPUT_CSS = """<style>
-[data-testid="stChatInput"] {
-  border: 2px solid var(--primary-color, #ff4b4b);
-  border-radius: 1.4rem;
+/* 테두리는 회색 안쪽 상자에 건다. 바깥 상자에 걸면 안쪽 상자(모서리 8px)가 둥근 테두리 밖으로 삐져나와 모서리가 잘려 보인다 */
+[data-testid="stChatInput"] > div:first-child {
+  border: 2px solid var(--primary-color, #ff4b4b) !important;
+  border-radius: 1.4rem !important;
   box-shadow: 0 4px 16px rgba(255, 75, 75, 0.22);
 }
-[data-testid="stChatInput"]:focus-within { box-shadow: 0 4px 22px rgba(255, 75, 75, 0.38); }
+[data-testid="stChatInput"] > div:first-child:focus-within { box-shadow: 0 4px 22px rgba(255, 75, 75, 0.38); }
 </style>"""
 VERDICT_ICON = {"GPU에 전부 올라감": "🟢", "일부 CPU 오프로딩 필요": "🟡", "CPU·RAM만으로 가능(느림)": "🟠", "불가": "🔴", "정보 부족": "⚪"}
 
@@ -105,6 +106,17 @@ def _bw_label(spec) -> str:
     return f"{spec.bandwidth_gbps:g} GB/s" if spec.bandwidth_gbps else "대역폭 미확인"
 
 
+def _bandwidth_input(spec: Any, key: str) -> float | None:
+    """사양표에 대역폭이 없는(TODO) 장치면 사용자가 확인한 값을 직접 넣게 한다. 서비스가 값을 지어내지는 않는다."""
+    if spec.bandwidth_gbps is not None:
+        return None
+    bw = st.number_input("메모리 대역폭 (GB/s, 선택)", 0.0, 10000.0, 0.0, 1.0, key=key,
+                         help="공식 출처를 확인하지 못해 사양표에 비어 있는 값입니다. 제조사 사양 페이지나 GPU-Z 등에서 "
+                              "확인한 값을 넣으면 속도 추정·체험이 켜집니다. 넣은 값은 '사용자 입력값'으로 표시됩니다.")
+    st.caption("ℹ 이 장치는 메모리 대역폭이 사양표에 없어(공식 출처 미확인) 속도를 추정하지 못합니다. 알고 있다면 위에 입력하세요.")
+    return bw or None
+
+
 def spec_picker(prefix: str) -> None:
     """내 PC 사양 선택. Mac 사용자가 많아 Apple Silicon을 별도 탭으로 둔다 (통합 메모리라 입력 방식이 다르다)."""
     specs = load_specs()
@@ -119,16 +131,18 @@ def spec_picker(prefix: str) -> None:
                           0.05, key=f"{prefix}_mac_ratio",
                           help="통합 메모리 중 모델(GPU)에 쓸 수 있다고 보는 비율. 기본값은 가정값이며 나머지는 OS·앱 몫으로 둔다.")
         st.caption(f"GPU 사용 가능 약 {mem * ratio:.1f} GB로 판정합니다.")
+        mac_bw = _bandwidth_input(chip, f"{prefix}_mac_bw")
         if st.button("Mac 사양 적용", key=f"{prefix}_mac_apply", width="stretch"):
-            st.session_state["hw"] = hw_detect.manual(chip.name, mem, ratio).to_dict()
+            st.session_state["hw"] = hw_detect.manual(chip.name, mem, ratio, bandwidth_gbps=mac_bw).to_dict()
             st.rerun()
     with nv:
         gpus = [x for x in specs if x.type == "nvidia"]
         gpu = st.selectbox("GPU", gpus, key=f"{prefix}_nv_gpu",
                            format_func=lambda x: f"{x.name} · VRAM {x.vram_gb:g} GB · {_bw_label(x)}")
         ram = st.number_input("시스템 RAM (GB)", 1, 2048, default_ram, key=f"{prefix}_nv_ram")
+        nv_bw = _bandwidth_input(gpu, f"{prefix}_nv_bw")
         if st.button("NVIDIA 사양 적용", key=f"{prefix}_nv_apply", width="stretch"):
-            st.session_state["hw"] = hw_detect.manual(gpu.name, ram).to_dict()
+            st.session_state["hw"] = hw_detect.manual(gpu.name, ram, bandwidth_gbps=nv_bw).to_dict()
             st.rerun()
     with cpu:
         ram_c = st.number_input("시스템 RAM (GB)", 1, 2048, default_ram, key=f"{prefix}_cpu_ram")
@@ -171,7 +185,9 @@ def hardware_panel() -> None:
     else:
         st.caption(f"GPU 없음 · RAM {hw.ram_gb:.0f} GB · {hw.cpu_name}")
     if hw.bandwidth_gbps:
-        st.caption(f"메모리 대역폭 {hw.bandwidth_gbps:g} GB/s · [사양 출처]({hw.bandwidth_source})")
+        src = hw.bandwidth_source or ""
+        st.caption(f"메모리 대역폭 {hw.bandwidth_gbps:g} GB/s · "
+                   + (f"[사양 출처]({src})" if src.startswith("http") else "사용자 입력값 (공식 출처 미확인)"))
     st.caption(f"감지 방법: {hw.method}")
     for n in hw.notes:
         st.caption(f"ℹ {n}")
@@ -328,7 +344,9 @@ def fit_card(m: dict, hw: Hardware) -> tuple[FitReport, dict[str, SpeedEstimate]
             st.markdown(
                 f"- 파라미터 수 {format_params(m.get('params'))}, 레이어 {m.get('num_layers') or '정보 없음'}, "
                 f"KV 헤드 {m.get('num_kv_heads') or '정보 없음'} — **[근거 1] (모델 메타데이터)** · [원문]({m['hf_url']})\n"
-                + (f"- 메모리 대역폭 {hw.bandwidth_gbps:g} GB/s — **하드웨어 사양표** · [출처]({hw.bandwidth_source})\n"
+                + ((f"- 메모리 대역폭 {hw.bandwidth_gbps:g} GB/s — **하드웨어 사양표** · [출처]({hw.bandwidth_source})\n"
+                    if (hw.bandwidth_source or "").startswith("http") else
+                    f"- 메모리 대역폭 {hw.bandwidth_gbps:g} GB/s — **사용자 입력값** (공식 출처 미확인)\n")
                    if hw.bandwidth_gbps else "- 메모리 대역폭: 정보 없음 (속도 추정 생략)\n")
                 + f"- **계산값**: 필요 메모리 = 파라미터 × bpw ÷ 8 + KV 캐시(2 × 레이어 × KV 헤드 × 헤드 차원 × 컨텍스트 × "
                   f"{cfg['kv_cache_bytes']}바이트) + 오버헤드 {cfg['overhead_ratio']:.0%}\n"
@@ -385,6 +403,10 @@ def _paced(text: str, tok_s: float):
 
 
 def render_message(msg: dict, stream_tok_s: float | None = None) -> None:
+    if msg.get("persona"):
+        # 흉내 답변을 켠 질문은 연기 답변만 보인다 (근거 답변은 연기의 기준으로만 쓰고 접어 둔다)
+        render_persona(msg["persona"], stream_tok_s)
+        return
     with st.chat_message(msg["role"]):
         # 흉내 답변이 있으면 "내 PC에서 돌린 모델"에 해당하는 흉내 답변만 추정 속도로 재생한다
         if stream_tok_s and msg["role"] == "assistant" and not msg.get("error") and not msg.get("persona"):
@@ -401,12 +423,10 @@ def render_message(msg: dict, stream_tok_s: float | None = None) -> None:
                 st.caption(f"ℹ {w}")
             if msg.get("elapsed"):
                 st.caption(f"처리 시간 {msg['elapsed']:.1f}초")
-    if msg.get("persona"):
-        render_persona(msg["persona"], stream_tok_s)
 
 
 def render_persona(pa: dict, stream_tok_s: float | None = None) -> None:
-    """흉내 답변 (연기). RAG 답변과 구분되게 별도 말풍선·안내·바뀐 내용을 함께 보인다."""
+    """흉내 답변 (연기)만 말풍선으로 보인다. 근거 답변은 연기의 기준으로만 쓰고 화면에는 내지 않는다."""
     with st.chat_message("🎭", avatar="🎭"):
         st.markdown(f"**{md_escape(pa['model_id'])} · {pa['quant']} · {pa['tier']} 체급(유효 약 {pa['params_b']}B) 흉내 답변**")
         st.caption(persona.PERSONA_NOTICE)
@@ -415,13 +435,6 @@ def render_persona(pa: dict, stream_tok_s: float | None = None) -> None:
             st.write_stream(_paced(pa["answer"], stream_tok_s))
         else:
             st.markdown(pa["answer"])
-        changes = []
-        if pa["removed"] or pa["added"]:
-            changes.append(f"- 위 근거 기반 답변과 비교해 사라진 수치: {', '.join(pa['removed']) or '없음'} / "
-                           f"새로 생긴 수치: {', '.join(pa['added']) or '없음'} (코드로 비교)")
-        changes += [f"- {md_escape(x)}" for x in pa["mistakes"]]
-        with st.expander(f"연출로 바꾼 내용 보기 ({len(pa['mistakes'])}건 설명)"):
-            st.markdown("\n".join(changes) or "바꾼 내용이 없습니다 (큰 체급).")
 
 
 def first_question(m: dict) -> bool:
@@ -489,15 +502,27 @@ def experience_controls(m: dict, report: FitReport | None, speeds: dict[str, Spe
     best = report.best() if report else None
     default = quants.index(best.quant) if best and best.quant in quants else quants.index("Q4_K_M") if "Q4_K_M" in quants else 0
     c1, c2, c3 = st.columns([1, 1, 1])
-    speed_on = c1.toggle("내 PC 속도로 체험", key="speed_exp", disabled=not usable,
-                         help="답변을 이 PC에서 모델을 돌렸을 때의 추정 생성 속도로 보여 줍니다."
-                              + ("" if usable else " (하드웨어를 입력하고 대역폭을 아는 경우에만)"))
+    speed_on = c1.toggle("내 PC 속도로 체험", key="speed_exp",
+                         help="답변을 이 PC에서 모델을 돌렸을 때의 추정 생성 속도로 흘려 보여 줍니다. "
+                              "사양을 아직 안 골랐으면 켤 때 이 PC 하드웨어를 자동으로 감지합니다.")
+    if speed_on and current_hw() is None:
+        # 모델만 직접 고르고 사양은 건너뛴 경우: 켜는 순간 이 PC를 감지해 바로 쓸 수 있게 한다
+        _detect_hw()
+        st.rerun()
     persona_on = c2.toggle("🎭 이 모델 흉내 답변", key="persona_exp",
-                           help="이 모델 체급이 근거 없이 답했다면 어떨지 연기한 답을 함께 보여 줍니다. 실제 모델 출력이 아닙니다.")
+                           help="근거 답변 대신, 이 모델 체급이 근거 없이 답했다면 어땠을지 연기한 답만 보여 줍니다. 실제 모델 출력이 아닙니다.")
     # 키에 추천 양자화를 넣어, 컨텍스트·모델 변경으로 추천이 바뀌면 기본값도 따라가게 한다
     # (한 키를 쓰면 위젯이 처음 값을 기억해 4k에서의 추천 Q8_0이 32k에서도 남았다)
     quant = c3.selectbox("체험 양자화", quants, index=default, key=f"speed_quant::{m['id']}::{quants[default]}",
                          label_visibility="collapsed", disabled=not (speed_on or persona_on))
+    if speed_on and not usable:
+        hw = current_hw()
+        if hw.kind != "cpu" and hw.bandwidth_gbps is None:
+            reason = (f"⏱ {hw.spec_name or hw.gpu_name or '이 장치'}의 메모리 대역폭이 사양표에 없어(공식 출처 미확인) 속도를 재생할 수 없습니다. "
+                      "사이드바 '사양 선택 / 변경'에서 대역폭을 직접 입력하면 켜집니다.")
+        else:
+            reason = "⏱ 이 모델은 현재 사양에서 실행할 수 있는 양자화가 없어 속도를 추정하지 않습니다."
+        c1.caption(reason)
     tok_s = speeds[quant].tok_s if speed_on and quant in usable else None
     return tok_s, (quant if persona_on else None)
 
@@ -580,7 +605,15 @@ def render_consult_message(msg: dict, idx: int) -> None:
             st.caption(f"ℹ {n}")
 
 
+# 체험 토글은 사양 적용(st.rerun)처럼 그려지기 전에 끝나는 실행이 끼면 Streamlit이 값을 지워 저절로 꺼졌다.
+# 매 실행 처음에 값을 다시 써 두면 위젯이 안 그려진 실행이 있어도 유지된다.
+PERSISTENT_KEYS = ("speed_exp", "persona_exp")
+
+
 def main() -> None:
+    for k in PERSISTENT_KEYS:
+        if k in st.session_state:
+            st.session_state[k] = st.session_state[k]
     st.html(CHAT_INPUT_CSS)
     st.title("Can I run this model?")
     st.caption("로컬 LLM 실행 가능성·양자화·라이선스를 모델 메타데이터와 모델 카드 근거로 답합니다.")

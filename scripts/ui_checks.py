@@ -62,7 +62,25 @@ if case == "persona":
     pm = at.chat_message[-1]
     out["names"] = [x.name for x in at.chat_message]
     out["notice"] = any("연기(시뮬레이션)" in c.value for c in pm.caption)
-    out["changes"] = [x.value[:120] for x in pm.expander[0].markdown] if pm.expander else []
+    out["expanders"] = len(pm.expander)
+    out["answer"] = [x.value[:80] for x in pm.markdown][1:2]
+    out["exception"] = len(at.exception)
+if case == "speed":
+    # 사양을 건너뛰고 모델만 직접 고른 경우에도 속도 체험이 되는지 + 대역폭 TODO GPU에 직접 입력
+    from app.data_prep.hw_tables import by_name
+    at.button(key="onb_skip").click().run()
+    at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-0.6B").run()
+    at.toggle(key="speed_exp").set_value(True).run()
+    out["detected"] = (at.session_state["hw"] or {}).get("method")
+    at.chat_input[0].set_value("Qwen3-0.6B 레이어 수는?").run()
+    out["play_detected"] = [c.value for c in at.caption if "재생 중" in c.value][:1]
+    at.sidebar.selectbox(key="side_nv_gpu").set_value(by_name("RTX 4070")).run()
+    at.sidebar.number_input(key="side_nv_bw").set_value(504.0).run()
+    at.sidebar.button(key="side_nv_apply").click().run()
+    hw = at.session_state["hw"] or {}
+    out["manual_bw"] = [hw.get("spec_name"), hw.get("bandwidth_gbps"), hw.get("bandwidth_source")]
+    at.chat_input[0].set_value("Qwen3-0.6B 컨텍스트 길이는?").run()
+    out["play_manual"] = [c.value for c in at.caption if "재생 중" in c.value][-1:]
     out["exception"] = len(at.exception)
 if case == "consult":
     at.sidebar.radio(key="mode").set_value("추천 상담").run()
@@ -93,7 +111,10 @@ if case == "onboarding":
 if case == "welcome":
     # 아직 문서를 수집하지 않은 모델: 안내 말풍선·첫 질문 안내가 보이고, 예시 질문 버튼으로 질문이 처리된다
     from app.collect import cache
-    mid = next(i for i in ("Qwen/Qwen3.5-2B", "Qwen/Qwen3.5-0.8B", "HuggingFaceTB/SmolLM3-3B") if not cache.indexed_docs(i))
+    from app.data_prep.item_text import load_models
+    # 작은 모델부터 아직 문서를 수집하지 않은 것 (테스트를 돌릴 때마다 하나씩 수집되므로 고정 ID를 쓰지 않는다)
+    mid = next(m["id"] for m in sorted(load_models(), key=lambda m: m["params"] or 0)
+               if (m["params"] or 0) > 3e8 and not cache.indexed_docs(m["id"]))
     at.sidebar.selectbox(key="model_id").select(mid).run()
     out["model"] = mid
     out["welcome"] = [c.name for c in at.chat_message]
@@ -137,9 +158,14 @@ def main() -> int:
                  c.get("exception") == 0 and c.get("small_ctx") == 2048 and c.get("restored_ctx") == 32768,
                  f"전환 후 {c.get('small_ctx')}, 복귀 후 {c.get('restored_ctx')}, 예외 {c.get('exception')}"))
     pc = run_case("persona")
-    rows.append(("F2010", "🎭 흉내 답변: 근거 답변과 별도 말풍선, 연기 안내, 바뀐 수치 비교 표시",
-                 pc.get("exception") == 0 and pc.get("names", [])[-1:] == ["🎭"] and pc.get("notice") and bool(pc.get("changes")),
-                 f"말풍선 {pc.get('names')}, 안내={pc.get('notice')}, 변경={str(pc.get('changes'))[:90]}"))
+    rows.append(("F2010", "🎭 흉내 답변을 켜면 연기 답변 말풍선만 (근거 답변·바뀐 내용 칸 없음), 연기 안내 표시",
+                 pc.get("exception") == 0 and pc.get("names") == ["user", "🎭"] and pc.get("notice") and pc.get("expanders") == 0,
+                 f"말풍선 {pc.get('names')}, 안내={pc.get('notice')}, 접힌 칸 {pc.get('expanders')}개, 답 {pc.get('answer')}"))
+    sp = run_case("speed")
+    rows.append(("F2010", "속도 체험: 사양을 건너뛰고 모델만 골라도 켜면 자동 감지 후 재생, 대역폭 TODO GPU는 직접 입력값으로 재생",
+                 sp.get("exception") == 0 and sp.get("detected") != "manual" and bool(sp.get("play_detected"))
+                 and sp.get("manual_bw") == ["RTX 4070", 504.0, "사용자 입력"] and bool(sp.get("play_manual")),
+                 f"자동 감지({sp.get('detected')}) 후 {sp.get('play_detected')} / 직접 입력 {sp.get('manual_bw')} 후 {sp.get('play_manual')}"))
     wl = run_case("welcome")
     rows.append(("F2009", "빈 대화: 안내 말풍선과 첫 질문 소요 안내, 예시 질문 버튼으로 바로 질문",
                  wl.get("exception") == 0 and wl.get("welcome") == ["assistant"] and wl.get("first_notice")
