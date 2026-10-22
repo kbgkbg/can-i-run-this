@@ -265,6 +265,16 @@ def _():
     return "코딩" in q and not re.search(r"RTX|GPU|RAM|GB", q), f"→ '{q}'"
 
 
+@check("F2011", "추천 상담: '맥북 M5 16기가'는 사이드바 GPU가 아니라 Apple M5 통합 메모리로 판정")
+def _():
+    from app.features.consult import step
+    from app.features.hw_detect import manual
+    t = step([{"role": "user", "content": "맥북 m5 깡통 16기가램인데 뭐가 젤 돌리기 좋냐"}], manual("RTX 5060 Ti 16GB", 16), 0)
+    h = t.hardware
+    got = [h.kind, h.spec_name, h.gpu_mem_gb, h.bandwidth_gbps] if h else None
+    return got == ["apple", "Apple M5", 11.2, 153.0], f"{got} | {t.hw_note}"
+
+
 @check("F2011", "대화 속 GPU 이름 매칭 (줄임말·VRAM 구분)")
 def _():
     from app.data_prep.hw_tables import match_gpu

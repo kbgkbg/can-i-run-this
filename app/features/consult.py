@@ -32,8 +32,11 @@ CONSULT_SYSTEM = """너는 로컬 LLM 추천 상담가다. 사용자가 자기 P
 {{"action": "ask" | "search",
   "message": "사용자에게 할 짧은 말 (한국어)",
   "condition": "지금까지 사용자가 말한 조건(용도, 그리고 말했을 때만 언어·크기·내 GPU에서 돌아가야 하는지)을 쉼표로 이은 한 문장, ask일 때도 아는 만큼",
-  "gpu": "사용자가 말한 GPU 이름 또는 null", "ram_gb": 숫자 또는 null}}"""
+  "gpu": "사용자가 말한 GPU 이름, Mac이면 칩 이름(예: 맥북 M5 → \"Apple M5\", 칩을 모르면 \"Apple\"), 모르면 null",
+  "ram_gb": 숫자 또는 null}}"""
 
+
+_MAC_WORDS = re.compile(r"맥북|맥미니|맥스튜디오|아이맥|맥\s|mac|애플\s*실리콘|apple", re.IGNORECASE)
 
 # 언어 조건 이름과 사용자가 그 언어를 말했다고 볼 단서
 _LANGUAGES = {"한국어": ("한국", "한글", "korean"), "영어": ("영어", "english"), "일본어": ("일본", "japanese"),
@@ -95,10 +98,19 @@ def step(history: list[dict[str, str]], hw: Hardware | None, asked: int = 0) -> 
         turn = ConsultTurn("search", "지금까지 말씀하신 조건으로 찾아볼게요.", turn.condition or said)
     gpu = str(v.get("gpu") or "").strip()
     ram = v.get("ram_gb") if isinstance(v.get("ram_gb"), (int, float)) else None
+    said = " ".join(h["content"] for h in history if h["role"] == "user")
+    if not gpu and _MAC_WORDS.search(said):
+        # "맥북 m5 16기가"에서 LLM이 칩을 gpu로 안 넘긴 경우. 사이드바 GPU(예: RTX 5060 Ti)를 이어 쓰면 안 된다
+        chip = re.search(r"\bm\s?(\d)\s*(pro|max|ultra)?\b", said, re.IGNORECASE)
+        gpu = f"Apple M{chip.group(1)} {chip.group(2) or ''}".strip() if chip else "Apple"
     if gpu or ram:
         spec = match_gpu(gpu) if gpu else None
-        if gpu and spec is None:
-            turn.hw_note = f"'{gpu}'는 사양표에 없어 하드웨어 판정에 쓰지 못했습니다. 사이드바에서 직접 입력해 주세요."
+        if gpu.lower() == "apple":
+            turn.hw_note = "Mac은 칩(M1~M5, Pro/Max 등)마다 메모리 대역폭이 달라요. 어떤 칩인지 알려 주시면 그 칩으로 판정합니다."
+        elif gpu and spec is None:
+            turn.hw_note = (f"'{gpu}'는 사양표에 없어 하드웨어 판정에 쓰지 못했습니다. "
+                            + ("Mac이면 칩 이름(M1~M5, Pro/Max)을 알려 주시거나 " if gpu.lower().startswith("apple") else "")
+                            + "사이드바 '사양 선택 / 변경'에서 직접 골라 주세요.")
         else:
             base_ram = ram or (hw.ram_gb if hw else 16)
             turn.hardware = manual(spec.name if spec else (hw.spec_name if hw else None), base_ram)
