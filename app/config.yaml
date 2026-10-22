@@ -16,15 +16,16 @@ paths:
 # LLM / 임베딩 (SSAFY GMS, OpenAI 호환). 키와 주소는 .env에서 읽는다.
 # TODO(확인 필요): GMS에서 실제로 제공하는 모델명으로 맞출 것
 llm:
-  # SSAFY GMS의 gpt-6-luna (chat completions로 호출. Responses API는 추론 블록이 섞인 구조라 쓰지 않는다)
-  chat_model: gpt-6-luna
+  # SSAFY GMS의 gpt-6-sol (chat completions로 호출). gpt-6-luna에서 바꿨다: 알고리즘 문제 하나에 luna 약 60초 -> sol 약 28초(둘 다 정답),
+  # 🎭 흉내 답변에서 중형 이하의 실수가 더 그럴듯했다 (질문 3개 × 체급 4개 비교)
+  chat_model: gpt-6-sol
   # 🎭 대화 체험의 기준 답(큰 체급은 그대로 보인다). gpt-4o-mini 때는 "능금이 뭐야?"를 얼버무리고 간단한 산수도 틀려
   # 대형 체급이 대형답지 않아 따로 두었다. 지금은 답변 모델과 같다
-  persona_model: gpt-6-luna
+  persona_model: gpt-6-sol
   # large(3072차원). small(1536차원)로 만든 색인과는 섞을 수 없어 build_meta_index.py가 감지해 다시 만든다
   embedding_model: text-embedding-3-large
-  temperature: null          # gpt-6-luna는 기본값만 허용한다 (0을 주면 400). null이면 보내지 않는다
-  request_timeout_s: 180      # gpt-6-luna는 어려운 문제에서 오래 추론한다 (알고리즘 문제 하나에 생성만 45초 측정)
+  temperature: null          # gpt-6 계열은 기본값만 허용한다 (luna는 0을 주면 400). null이면 보내지 않는다
+  request_timeout_s: 180      # 추론 모델은 어려운 문제에서 오래 생각한다 (luna로 알고리즘 문제 하나에 생성만 45~80초 측정)
   max_retries: 2
 
 # 데이터 수집 (F2001)

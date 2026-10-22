@@ -43,7 +43,7 @@ python scripts/build_meta_index.py            # --fetch: HF Hub에서 새로 수
 streamlit run app/ui/streamlit_app.py
 ```
 
-> **LLM 설정** (`app/config.yaml llm`): 답변·흉내 대화 `gpt-6-luna`(SSAFY GMS, temperature는 기본값만 허용해 보내지 않음), 임베딩 `text-embedding-3-large`.
+> **LLM 설정** (`app/config.yaml llm`): 답변·흉내 대화·검색어 추출·상담 `gpt-6-sol`(SSAFY GMS, temperature는 기본값만 허용해 보내지 않음. luna에서 교체: 알고리즘 문제 약 60초 → 28초), 임베딩 `text-embedding-3-large`.
 > 임베딩 모델을 바꾸면 기존 색인과 차원이 달라 `python scripts/build_meta_index.py`를 다시 실행해야 한다 (수집해 둔 문서까지 자동으로 다시 색인, 재수집 없음).
 
 ### 화면 사용 순서
