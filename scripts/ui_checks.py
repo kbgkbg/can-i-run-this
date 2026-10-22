@@ -132,6 +132,15 @@ if case == "welcome":
     out["after"] = [c.name for c in at.chat_message]
     out["question"] = [mk.value for c in at.chat_message if c.name == "user" for mk in c.markdown][:1]
     out["exception"] = len(at.exception)
+if case == "sort":
+    # 모델 정렬: 인기순·요즘 뜨는 순·내 PC 추천순(사양 적용 후)
+    from app.data_prep.hw_tables import by_name
+    at.sidebar.selectbox(key="side_nv_gpu").set_value(by_name("RTX 3080")).run()
+    at.sidebar.button(key="side_nv_apply").click().run()
+    for name, label in (("popular", "🔥 인기순 (다운로드)"), ("trending", "📈 요즘 뜨는 순"), ("fit", "⭐ 내 PC 추천순")):
+        at.sidebar.selectbox(key="model_sort").set_value(label).run()
+        out[name] = list(at.sidebar.selectbox(key="model_id").options[:3])
+    out["exception"] = len(at.exception)
 print("@@" + json.dumps(out, ensure_ascii=False))
 '''
 
@@ -172,6 +181,11 @@ def main() -> int:
                  and "자료" not in "".join(pc.get("answer1", [])) and pc.get("rag_names") == ["assistant"],
                  f"안내 {pc.get('welcome')}, 문서 수집 상태 {pc.get('status')}개, 말풍선 {pc.get('names')}, "
                  f"답1 {pc.get('answer1')}, 후속 답 {pc.get('answer2')}, 끄면 {pc.get('rag_names')}"))
+    so = run_case("sort")
+    rows.append(("F2009", "모델 목록 정렬: 인기순(다운로드)·요즘 뜨는 순(trending 순위)·내 PC 추천순(GPU에 다 올라가고 빠른 것)",
+                 so.get("exception") == 0 and "↓" in "".join(so.get("popular", [])) and "1위" in (so.get("trending") or [""])[0]
+                 and all("🟢" in x for x in so.get("fit", [])),
+                 f"인기 {so.get('popular', [])[:1]}, 뜨는 {so.get('trending', [])[:1]}, 추천 {so.get('fit', [])[:2]}"))
     sp = run_case("speed")
     rows.append(("F2010", "속도 체험: 사양을 건너뛰고 모델만 골라도 켜면 자동 감지 후 재생, 예전 TODO였던 RTX 4070은 사양표 대역폭으로 재생",
                  sp.get("exception") == 0 and sp.get("detected") != "manual" and bool(sp.get("play_detected"))

@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import json
 import sys
 import time
 from pathlib import Path
@@ -18,7 +19,7 @@ import psutil  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from app.collect import cache  # noqa: E402
-from app.config import get_config, missing_required_env  # noqa: E402
+from app.config import get_config, missing_required_env, path  # noqa: E402
 from app.data_prep.hw_tables import load_specs  # noqa: E402
 from app.data_prep.item_text import format_params, load_models  # noqa: E402
 from app.features import hw_detect  # noqa: E402
@@ -57,6 +58,69 @@ VERDICT_ICON = {"GPU에 전부 올라감": "🟢", "일부 CPU 오프로딩 필�
 @st.cache_data(show_spinner=False)
 def models_by_id() -> dict[str, dict]:
     return {m["id"]: m for m in load_models()}
+
+
+SORT_POPULAR, SORT_TRENDING, SORT_FIT, SORT_RECENT, SORT_SMALL = (
+    "🔥 인기순 (다운로드)", "📈 요즘 뜨는 순", "⭐ 내 PC 추천순", "🆕 최근 업데이트순", "📏 작은 모델부터")
+
+
+@st.cache_data(show_spinner=False)
+def trending_rank() -> dict[str, int]:
+    """스냅샷의 trending 목록(HF trendingScore 순) -> 순위 (1부터)."""
+    snap = json.loads(path("models_json").read_text(encoding="utf-8"))
+    return {mid: i for i, mid in enumerate(snap.get("trending", []), 1)}
+
+
+@st.cache_data(show_spinner=False)
+def fit_ranking(hw_json: str) -> dict[str, tuple[int, float, str]]:
+    """내 PC 추천순: 모델 ID -> (구간, -파라미터, 표시 문구). 구간이 작을수록 위.
+
+    0: GPU에 다 올라가고 쓸 만한 속도(usable_tok_s 이상) / 1: GPU에 다 올라가지만 느림 / 2: 오프로딩 / 3: CPU만 / 4: 불가·정보 부족.
+    같은 구간에서는 큰 모델(더 똑똑할 가능성이 큰)부터 보인다.
+    """
+    hw = Hardware.from_dict(json.loads(hw_json))
+    floor = get_config()["hardware"]["usable_tok_s"]
+    out = {}
+    for mid, m in models_by_id().items():
+        report = assess(m, hw)
+        speeds = {q: sp.tok_s for q, sp in estimate_all(m, hw, report).items()}
+        best = report.best(speeds)
+        if best is None or report.missing:
+            out[mid] = (4, 0.0, "불가" if best is None and not report.missing else "정보 부족")
+            continue
+        tok = speeds.get(best.quant)
+        tier = {"GPU에 전부 올라감": 0 if (tok or 0) >= floor else 1, "일부 CPU 오프로딩 필요": 2}.get(best.verdict, 3)
+        out[mid] = (tier, -(m.get("params") or 0), f"{VERDICT_ICON[best.verdict]} {best.quant}" + (f" {tok:.0f} tok/s" if tok else ""))
+    return out
+
+
+def sorted_model_ids(models: dict[str, dict], order: str, hw: Hardware | None) -> tuple[list[str], dict[str, str]]:
+    """(정렬된 모델 ID, 목록에 붙일 표시 문구)"""
+    ids = list(models)  # models.json 순서 = 다운로드순
+    if order == SORT_TRENDING:
+        rank = trending_rank()
+        ids.sort(key=lambda i: (rank.get(i, 10 ** 6), -(models[i].get("downloads") or 0)))
+        return ids, {i: f"📈 {rank[i]}위" for i in ids if i in rank}
+    if order == SORT_FIT and hw is not None:
+        fit = fit_ranking(json.dumps(hw.to_dict(), sort_keys=True))
+        ids.sort(key=lambda i: fit[i][:2])
+        return ids, {i: fit[i][2] for i in ids}
+    if order == SORT_RECENT:
+        ids.sort(key=lambda i: models[i].get("last_modified") or "", reverse=True)
+        return ids, {i: f"🆕 {(models[i].get('last_modified') or '')[:10]}" for i in ids}
+    if order == SORT_SMALL:
+        ids.sort(key=lambda i: models[i].get("params") or 0)
+        return ids, {}
+    return ids, {i: f"↓{_compact(models[i].get('downloads'))}" for i in ids if models[i].get("downloads")}
+
+
+def _compact(n: int | None) -> str:
+    if not n:
+        return "?"
+    for unit, size in (("M", 1e6), ("K", 1e3)):
+        if n >= size:
+            return f"{n / size:.1f}{unit}"
+    return str(n)
 
 
 def md_escape(text: str) -> str:
@@ -206,10 +270,15 @@ def sidebar(models: dict[str, dict]) -> tuple[dict | None, Any]:
         st.radio("모드", [MODE_ASK, MODE_CONSULT], key="mode", horizontal=True,
                  help="추천 상담: 챗봇과 대화하며 조건을 말하면 맞는 모델을 찾아 줍니다.")
         st.header("모델 선택")
-        ids = list(models)  # models.json 순서 = 다운로드순
+        order = st.selectbox("정렬", [SORT_POPULAR, SORT_TRENDING, SORT_FIT, SORT_RECENT, SORT_SMALL], key="model_sort",
+                             help="⭐ 내 PC 추천순: 고른 사양에서 GPU에 다 올라가고 쓸 만한 속도가 나는 모델을 큰 것부터 보여 줍니다.")
+        hw = current_hw()
+        if order == SORT_FIT and hw is None:
+            st.caption("내 PC 사양을 먼저 고르면 추천순으로 정렬됩니다. 지금은 인기순입니다.")
+        ids, badge = sorted_model_ids(models, order, hw)
         model_id = st.selectbox(
             "질문할 모델", ids, index=None, key="model_id",
-            format_func=lambda i: f"{i}  ·  {short_params(models[i].get('params'))}",
+            format_func=lambda i: f"{i}  ·  {short_params(models[i].get('params'))}" + (f"  ·  {badge[i]}" if i in badge else ""),
             placeholder="모델 이름을 입력해 검색하세요",
         )
         with st.expander("🔎 조건으로 모델 찾기"):
