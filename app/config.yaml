@@ -24,7 +24,7 @@ llm:
   # large(3072차원). small(1536차원)로 만든 색인과는 섞을 수 없어 build_meta_index.py가 감지해 다시 만든다
   embedding_model: text-embedding-3-large
   temperature: null          # gpt-6-luna는 기본값만 허용한다 (0을 주면 400). null이면 보내지 않는다
-  request_timeout_s: 60
+  request_timeout_s: 180      # gpt-6-luna는 어려운 문제에서 오래 추론한다 (알고리즘 문제 하나에 생성만 45초 측정)
   max_retries: 2
 
 # 데이터 수집 (F2001)

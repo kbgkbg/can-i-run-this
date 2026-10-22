@@ -183,6 +183,16 @@ def _():
     return ok, f"후속 '그럼 Q8_0은?' 답에 Q8_0 계산값 {q8_total} GB 포함={q8_total in follow['answer']}, 일반 지식 수치 문장 제거 {removed}"
 
 
+@check("F2007", "모델과 관계없는 일반 질문(알고리즘 문제)은 문서 검색 없이 일반 답변, 수치 제거 장치를 적용하지 않음")
+def _():
+    from app.collect.collector import extract_queries
+    q = "정수 n개 배열에서 합이 k인 연속 부분 배열의 개수를 구하는 O(n) 알고리즘을 파이썬으로 짜줘"
+    queries, fallback = extract_queries(m8, q)
+    r = ask(m8, q)
+    ok = queries == [] and not fallback and r.collect.general and not r.cited and r.notice and "```" in r.answer
+    return ok, f"검색어 {queries}, 일반 질문={r.collect.general}, 안내='{r.notice[:40]}', 코드 포함={'```' in r.answer}"
+
+
 @check("F2001", "최신 멀티모달(image-text-to-text) 모델과 최근 뜨는 원본 모델도 목록에 포함")
 def _():
     snap = json.loads(path("models_json").read_text(encoding="utf-8"))

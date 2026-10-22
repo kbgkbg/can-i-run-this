@@ -10,10 +10,12 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import openai
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.collect.collector import CollectResult, collect
 from app.log import get_logger
 from app.rag.graph import build_graph
+from app.rag.llm import chat_model
 from app.rag.retrieve import Evidence
 
 log = get_logger("pipeline")
@@ -44,11 +46,28 @@ def user_message(e: Exception) -> str:
         return "API 키가 올바르지 않습니다. .env의 OPENAI_API_KEY를 확인하세요."
     if isinstance(e, openai.RateLimitError):
         return "LLM 호출 한도에 걸렸습니다. 잠시 후 다시 시도해 주세요."
-    if isinstance(e, (openai.APIConnectionError, openai.APITimeoutError)):
+    if isinstance(e, openai.APITimeoutError):  # APIConnectionError의 하위 클래스라 먼저 본다
+        return ("LLM 응답이 제한 시간 안에 오지 않았습니다. 길고 어려운 질문은 추론 모델이 오래 생각해 늦어질 수 있어요. "
+                "잠시 후 다시 시도해 주세요.")
+    if isinstance(e, openai.APIConnectionError):
         return "LLM 서버(GMS)에 연결하지 못했습니다. 네트워크와 .env의 OPENAI_BASE_URL을 확인하세요."
     if isinstance(e, openai.APIStatusError):
         return f"LLM 서버가 오류를 돌려주었습니다 (HTTP {e.status_code}). 잠시 후 다시 시도해 주세요."
     return "답변을 만드는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+
+
+GENERAL_NOTICE = "선택한 모델의 문서와 관계없는 일반 질문이라, 문서 검색 없이 일반 지식으로 답했습니다 (근거 문서 없음)."
+GENERAL_SYSTEM = ("너는 로컬 LLM 실행을 돕는 서비스의 챗봇이다. 지금 질문은 선택한 모델과 관계없는 일반 질문이다. "
+                  "알고리즘 문제·코딩·상식 등 무엇이든 정확하고 친절하게 한국어로 답한다. 풀이가 필요하면 단계별로 설명하고, "
+                  "코드는 코드 블록으로 쓴다.")
+
+
+def general_answer(question: str, history: list[tuple[str, str]] | None = None) -> str:
+    msgs: list = [SystemMessage(GENERAL_SYSTEM)]
+    for r, c in history or []:
+        msgs.append(HumanMessage(c) if r == "user" else AIMessage(c))
+    msgs.append(HumanMessage(question))
+    return chat_model().invoke(msgs).content
 
 
 def _noop(stage: str, message: str) -> None:
@@ -72,6 +91,20 @@ def ask(model: dict[str, Any], question: str, calc: str = "", on_step: StepCallb
         log.exception("문서 수집 실패: %s", model["id"])
         result.warnings.append("외부 문서 수집에 실패해 이미 수집된 문서만으로 답합니다. (" + user_message(e) + ")")
     result.timings["수집"] = time.monotonic() - t0
+
+    if result.collect is not None and result.collect.general:
+        # 알고리즘 문제·상식처럼 모델 문서와 관계없는 질문: 문서 검색·근거 표기 없이 일반 답변
+        on_step("생성", "일반 질문이라 문서 없이 답하는 중")
+        t1 = time.monotonic()
+        try:
+            result.answer = general_answer(question, history)
+        except Exception as e:  # noqa: BLE001
+            log.exception("일반 답변 실패: %s", model["id"])
+            result.error = user_message(e)
+            return result
+        result.timings["생성"] = time.monotonic() - t1
+        result.notice = GENERAL_NOTICE
+        return result
 
     # 2) retrieve -> generate. 노드가 끝날 때마다 진행 상태를 알린다.
     t1 = time.monotonic()

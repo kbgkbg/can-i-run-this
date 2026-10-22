@@ -34,6 +34,7 @@ class CollectResult:
     concept_queries: list[str] = field(default_factory=list)    # 위키백과로 라우팅된 개념 검색어 (검색 단계에서도 사용)
     new_queries: list[str] = field(default_factory=list)        # 캐시에 없어 실제로 수집한 검색어
     query_fallback: bool = False                                 # 프롬프트 1 실패로 기본 검색어를 썼는지
+    general: bool = False                                        # 모델과 관계없는 일반 질문 (프롬프트 1이 [])
     candidates: list[Candidate] = field(default_factory=list)
     filtered: list[str] = field(default_factory=list)            # 코드 필터로 뺀 다른 모델 저장소 (선별 전)
     selected: list[str] = field(default_factory=list)
@@ -58,10 +59,8 @@ def extract_queries(model: dict[str, Any], question: str) -> tuple[list[str], bo
     def validate(value: Any) -> list[str]:
         if not isinstance(value, list) or not all(isinstance(q, str) for q in value):
             raise ValueError("문자열 배열이 아님")
-        queries = [q.strip() for q in value if q.strip()]
-        if not queries:
-            raise ValueError("빈 배열")
-        return queries[:max_q]
+        # 빈 배열은 실패가 아니라 "모델 문서가 필요 없는 일반 질문"이라는 뜻이다 (예전에는 실패로 보고 2번 더 물었다)
+        return [q.strip() for q in value if q.strip()][:max_q]
 
     queries = invoke_json(query_extraction_messages(item_text(model), question, max_q), validate, "프롬프트1")
     if queries is None:
@@ -204,6 +203,10 @@ def collect(model: dict[str, Any], question: str, on_step: StepCallback = _noop)
 
     on_step("검색어 추출", "질문에서 외부 문서 검색어를 뽑는 중")
     result.queries, result.query_fallback = extract_queries(model, question)
+    if not result.queries:
+        result.general = True
+        on_step("수집 생략", "모델과 관계없는 일반 질문이라 문서를 찾지 않습니다")
+        return result
     result.concept_queries = [q for q in result.queries if route(q, model) == "wiki"]
     result.new_queries = [q for q in result.queries if cache.normalize_query(q) not in entry["queries"]]
     need_card = own_card.doc_id not in entry["docs"] and not entry.get("no_card")
