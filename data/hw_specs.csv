@@ -26,7 +26,7 @@ RTX 3070 Ti,nvidia,8,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/co
 RTX 3070,nvidia,8,448,https://www.nvidia.com/content/PDF/nvidia-ampere-ga-102-gpu-architecture-whitepaper-v2.pdf,Ampere GA102 백서 Table 10 (p.47)
 RTX 3060 Ti,nvidia,8,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
 RTX 3060,nvidia,12,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인 (12 GB 모델). 대역폭은 공식 출처 미확인
-Apple M1,apple,,TODO,https://support.apple.com/en-us/111893,공식 사양 페이지에 대역폭 표기 없음
+Apple M1,apple,,68.25,https://en.wikipedia.org/wiki/Apple_M1,"통합 메모리. Apple 사양 페이지에는 표기 없음. 위키백과: LPDDR4X-4266 128-bit, 68.25 GB/s"
 Apple M1 Pro,apple,,200,https://support.apple.com/en-us/111901,통합 메모리 (GPU 사용 가능량 = RAM × apple_gpu_mem_ratio)
 Apple M1 Max,apple,,400,https://support.apple.com/en-us/111901,통합 메모리
 Apple M1 Ultra,apple,,800,https://support.apple.com/en-us/111900,통합 메모리 (Mac Studio 2022)
@@ -38,8 +38,12 @@ Apple M3,apple,,100,https://support.apple.com/en-us/117735,통합 메모리
 Apple M3 Pro,apple,,150,https://support.apple.com/en-us/117736,통합 메모리
 Apple M3 Max (30-core GPU),apple,,300,https://support.apple.com/en-us/117736,통합 메모리 (14코어 CPU / 30코어 GPU 구성)
 Apple M3 Max (40-core GPU),apple,,400,https://support.apple.com/en-us/117736,통합 메모리 (16코어 CPU / 40코어 GPU 구성)
+Apple M3 Ultra,apple,,819,https://support.apple.com/en-us/122211,"통합 메모리. Mac Studio (2025) 기술 사양: 60코어·80코어 GPU 모두 819GB/s"
 Apple M4,apple,,120,https://support.apple.com/en-us/121552,통합 메모리
 Apple M4 Pro,apple,,273,https://support.apple.com/en-us/121553,통합 메모리
 Apple M4 Max (32-core GPU),apple,,410,https://support.apple.com/en-us/121553,통합 메모리 (14코어 CPU / 32코어 GPU 구성)
 Apple M4 Max (40-core GPU),apple,,546,https://support.apple.com/en-us/121553,통합 메모리 (16코어 CPU / 40코어 GPU 구성)
 Apple M5,apple,,153,https://support.apple.com/en-us/125405,"통합 메모리. MacBook Pro (14-inch, M5) 기술 사양 ""153GB/s memory bandwidth"" (Apple 뉴스룸 2025-10 발표와 같은 값)"
+Apple M5 Pro,apple,,307,https://support.apple.com/en-us/126318,"통합 메모리. MacBook Pro (14-inch, M5 Pro or M5 Max) 기술 사양: 16코어·20코어 GPU 모두 307GB/s"
+Apple M5 Max (32-core GPU),apple,,460,https://support.apple.com/en-us/126318,"통합 메모리. 같은 기술 사양 ""M5 Max with 18-core CPU and 32-core GPU (460GB/s memory bandwidth)"""
+Apple M5 Max (40-core GPU),apple,,614,https://support.apple.com/en-us/126318,"통합 메모리. 같은 기술 사양 ""M5 Max with 18-core CPU and 40-core GPU (614GB/s memory bandwidth)"""

@@ -39,9 +39,11 @@
 | NVIDIA Ada GPU Architecture 백서 (Table 2, 3) https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf | RTX 4090, 4080, 3090 Ti, 3080 Ti 대역폭 |
 | NVIDIA Ampere GA102 백서 (Table 2, 9, 10) https://www.nvidia.com/content/PDF/nvidia-ampere-ga-102-gpu-architecture-whitepaper-v2.pdf | RTX 3090, 3080(10 GB), 3070 대역폭 |
 | Apple 기술 사양 페이지 (support.apple.com/en-us/111901, 111900, 111867, 111340, 111835, 117735, 117736, 121552, 121553) | Apple M1 Pro/Max/Ultra ~ M4 Pro/Max 메모리 대역폭 |
+| Apple 기술 사양 페이지 (support.apple.com/en-us/125405, 126318, 126319, 122211) | Apple M5 153, M5 Pro 307, M5 Max 460(32코어 GPU)·614(40코어 GPU), M3 Ultra 819 GB/s |
+| 위키백과 Apple M1 https://en.wikipedia.org/wiki/Apple_M1 | Apple M1 68.25 GB/s (LPDDR4X-4266, 128-bit). Apple 사양 페이지에 표기가 없어 이 값만 위키백과 |
 
-**TODO (공식 출처 미확인):** RTX 4080 SUPER, 4070 Ti SUPER, 4070 Ti, 4070 SUPER, 4070, 4060 Ti, 4060, 3080 12GB, 3070 Ti, 3060 Ti, 3060의 대역폭,
-Apple M1(기본)의 대역폭 (사양 페이지 111893에 표기 없음).
+**TODO (공식 출처 미확인):** RTX 4080 SUPER, 4070 Ti SUPER, 4070 Ti, 4070 SUPER, 4070, 4060 Ti, 4060, 3080 12GB, 3070 Ti, 3060 Ti, 3060의 대역폭.
+Apple Silicon은 M1 ~ M5(기본·Pro·Max·Ultra) 전부 채움 (2026-10-22 재조사).
 
 ## 4. 계산에 쓰는 그 밖의 값 — `app/config.yaml`
 
