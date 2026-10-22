@@ -81,8 +81,9 @@ if case == "speed":
     out["detected"] = (at.session_state["hw"] or {}).get("method")
     at.chat_input[0].set_value("Qwen3-0.6B 레이어 수는?").run()
     out["play_detected"] = [c.value for c in at.caption if "재생 중" in c.value][:1]
+    # 예전에 대역폭 TODO였던 RTX 4070: 이제 사양표 값(504 GB/s)으로 바로 재생된다 (입력칸 없음)
     at.sidebar.selectbox(key="side_nv_gpu").set_value(by_name("RTX 4070")).run()
-    at.sidebar.number_input(key="side_nv_bw").set_value(504.0).run()
+    out["bw_input"] = any(n.key == "side_nv_bw" for n in at.sidebar.number_input)
     at.sidebar.button(key="side_nv_apply").click().run()
     hw = at.session_state["hw"] or {}
     out["manual_bw"] = [hw.get("spec_name"), hw.get("bandwidth_gbps"), hw.get("bandwidth_source")]
@@ -172,9 +173,9 @@ def main() -> int:
                  f"안내 {pc.get('welcome')}, 문서 수집 상태 {pc.get('status')}개, 말풍선 {pc.get('names')}, "
                  f"답1 {pc.get('answer1')}, 후속 답 {pc.get('answer2')}, 끄면 {pc.get('rag_names')}"))
     sp = run_case("speed")
-    rows.append(("F2010", "속도 체험: 사양을 건너뛰고 모델만 골라도 켜면 자동 감지 후 재생, 대역폭 TODO GPU는 직접 입력값으로 재생",
+    rows.append(("F2010", "속도 체험: 사양을 건너뛰고 모델만 골라도 켜면 자동 감지 후 재생, 예전 TODO였던 RTX 4070은 사양표 대역폭으로 재생",
                  sp.get("exception") == 0 and sp.get("detected") != "manual" and bool(sp.get("play_detected"))
-                 and sp.get("manual_bw") == ["RTX 4070", 504.0, "사용자 입력"] and bool(sp.get("play_manual")),
+                 and sp.get("manual_bw", [None])[:2] == ["RTX 4070", 504.0] and sp.get("bw_input") is False and bool(sp.get("play_manual")),
                  f"자동 감지({sp.get('detected')}) 후 {sp.get('play_detected')} / 직접 입력 {sp.get('manual_bw')} 후 {sp.get('play_manual')}"))
     wl = run_case("welcome")
     rows.append(("F2009", "빈 대화: 안내 말풍선과 첫 질문 소요 안내, 예시 질문 버튼으로 바로 질문",

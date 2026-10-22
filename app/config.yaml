@@ -109,6 +109,8 @@ persona:
 hardware:
   apple_gpu_mem_ratio: 0.7   # 통합 메모리 중 GPU가 쓸 수 있다고 보는 비율 (가정값, 조정 가능)
   overhead_ratio: 0.10       # 가중치+KV 캐시 외 런타임 오버헤드 비율 (가정값, Phase 6에서 검토)
+  # 추천 양자화의 최소 속도. GPU에 다 올라가도 이보다 느리면 더 낮은 양자화를 추천한다 (가정값: 대화로 쓸 만한 속도)
+  usable_tok_s: 10
   speed_efficiency: 0.6      # 실효 대역폭 / 이론 대역폭 (가정값, 실측으로 보정 예정)
   default_context: 4096      # 판정에 쓸 기본 컨텍스트 길이
   kv_cache_bytes: 2          # KV 캐시 원소당 바이트 (FP16)

@@ -42,7 +42,10 @@
 | Apple 기술 사양 페이지 (support.apple.com/en-us/125405, 126318, 126319, 122211) | Apple M5 153, M5 Pro 307, M5 Max 460(32코어 GPU)·614(40코어 GPU), M3 Ultra 819 GB/s |
 | 위키백과 Apple M1 https://en.wikipedia.org/wiki/Apple_M1 | Apple M1 68.25 GB/s (LPDDR4X-4266, 128-bit). Apple 사양 페이지에 표기가 없어 이 값만 위키백과 |
 
-**TODO (공식 출처 미확인):** RTX 4080 SUPER, 4070 Ti SUPER, 4070 Ti, 4070 SUPER, 4070, 4060 Ti, 4060, 3080 12GB, 3070 Ti, 3060 Ti, 3060의 대역폭.
+| 위키백과 List of Nvidia graphics processing units https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units | RTX 4080 SUPER ~ 4060, 3080 12GB, 3070 Ti, 3060 Ti, 3060(8/12GB), 3050, RTX 20 시리즈 대역폭. NVIDIA 공식 페이지는 버스 폭만 있어, 표의 메모리 속도 × 버스 폭 ÷ 8로 모두 검산. RTX 3060은 표의 대역폭 칸이 같은 표의 속도·버스 폭과 맞지 않아 계산값(360/240) 사용 |
+| AnandTech RTX 2080 Super 리뷰 https://www.anandtech.com/show/14663 , Notebookcheck RTX 2060 Super 리뷰 | 2080 SUPER 496 GB/s(15.5 Gbps), 2060 SUPER 448 GB/s(14 Gbps × 256-bit) |
+
+**TODO:** 없음 (NVIDIA RTX 20~50, Apple M1~M5 전부 채움, 2026-10-22).
 Apple Silicon은 M1 ~ M5(기본·Pro·Max·Ultra) 전부 채움 (2026-10-22 재조사).
 
 ## 4. 계산에 쓰는 그 밖의 값 — `app/config.yaml`

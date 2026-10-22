@@ -51,13 +51,21 @@ class FitReport:
     alternatives: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
-    def best(self) -> QuantFit | None:
+    def best(self, speeds: dict[str, float | None] | None = None) -> QuantFit | None:
         """추천 양자화. GPU에 전부 올라가는 것이 있으면 그중 가장 정밀한 것.
+
+        speeds(양자화 -> 추정 tok/s)를 주면, GPU에 다 올라가도 쓸 만한 속도(usable_tok_s, 가정값)가 안 나오는
+        양자화는 건너뛴다. 대역폭이 낮은 장치(예: M1 16GB)에서 Q8_0 약 4 tok/s를 추천하던 문제 때문이다.
+        기준을 넘는 것이 없으면 GPU에 올라가는 것 중 가장 빠른(bpw가 가장 낮은) 것을 고른다.
 
         없으면(오프로딩·CPU만) 가장 낮은 bpw를 고른다. 이때는 가중치가 작을수록 GPU에 더 많이 올라가고
         RAM에서 읽는 양이 줄어 훨씬 빠르다 (예: Qwen3-8B, RTX 3080, 컨텍스트 32k에서 FP16 약 3 tok/s, Q4_K_M 수십 tok/s).
         """
         full = [r for r in self.rows if r.verdict == GPU_FULL]
+        if full and speeds:
+            floor = get_config()["hardware"]["usable_tok_s"]
+            fast = [r for r in full if (speeds.get(r.quant) or 0) >= floor]
+            return max(fast, key=lambda r: r.bpw) if fast else min(full, key=lambda r: r.bpw)
         if full:
             return max(full, key=lambda r: r.bpw)
         for verdict in (OFFLOAD, CPU_ONLY):

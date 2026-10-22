@@ -113,7 +113,7 @@ def _search_ids(cond: Condition, k: int) -> list[str]:
 
 def _best_fit(model: dict[str, Any], hw: Hardware) -> tuple[FitReport, Any]:
     report = assess(model, hw)
-    return report, report.best()
+    return report, report.best({q: s.tok_s for q, s in estimate_all(model, hw, report).items()})
 
 
 def _norm(s: str) -> str:

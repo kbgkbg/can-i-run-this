@@ -8,24 +8,33 @@ RTX 5060 Ti 8GB,nvidia,8,448,https://www.nvidia.com/en-us/geforce/graphics-cards
 RTX 5060,nvidia,8,448,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,Compare 50 Series Specs 표
 RTX 5050,nvidia,8,320,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,Compare 50 Series Specs 표
 RTX 4090,nvidia,24,1008,https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf,Ada 백서 Table 2 (p.13)
-RTX 4080 SUPER,nvidia,16,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 4080 SUPER,nvidia,16,736,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (23 Gbps × 256-bit)"
 RTX 4080,nvidia,16,716.8,https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf,Ada 백서 Table 3 (RTX 4080 16 GB)
-RTX 4070 Ti SUPER,nvidia,16,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
-RTX 4070 Ti,nvidia,12,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
-RTX 4070 SUPER,nvidia,12,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
-RTX 4070,nvidia,12,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
-RTX 4060 Ti 16GB,nvidia,16,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
-RTX 4060 Ti 8GB,nvidia,8,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
-RTX 4060,nvidia,8,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 4070 Ti SUPER,nvidia,16,672,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (21 Gbps × 256-bit)"
+RTX 4070 Ti,nvidia,12,504,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (21 Gbps × 192-bit)"
+RTX 4070 SUPER,nvidia,12,504,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (21 Gbps × 192-bit)"
+RTX 4070,nvidia,12,504,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (21 Gbps × 192-bit (GDDR6X))"
+RTX 4060 Ti 16GB,nvidia,16,288,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (18 Gbps × 128-bit)"
+RTX 4060 Ti 8GB,nvidia,8,288,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (18 Gbps × 128-bit)"
+RTX 4060,nvidia,8,272,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (17 Gbps × 128-bit)"
 RTX 3090 Ti,nvidia,24,1008,https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf,Ada 백서 Table 2 (비교 대상 열)
 RTX 3090,nvidia,24,936,https://www.nvidia.com/content/PDF/nvidia-ampere-ga-102-gpu-architecture-whitepaper-v2.pdf,Ampere GA102 백서 Table 9 (p.44-45)
 RTX 3080 Ti,nvidia,12,912,https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf,Ada 백서 Table 3 (비교 대상 열)
-RTX 3080 12GB,nvidia,12,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 3080 12GB,nvidia,12,912,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (19 Gbps × 384-bit)"
 RTX 3080,nvidia,10,760,https://www.nvidia.com/content/PDF/nvidia-ampere-ga-102-gpu-architecture-whitepaper-v2.pdf,Ampere GA102 백서 Table 2 (RTX 3080 10 GB)
-RTX 3070 Ti,nvidia,8,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
+RTX 3070 Ti,nvidia,8,608,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (19 Gbps × 256-bit)"
 RTX 3070,nvidia,8,448,https://www.nvidia.com/content/PDF/nvidia-ampere-ga-102-gpu-architecture-whitepaper-v2.pdf,Ampere GA102 백서 Table 10 (p.47)
-RTX 3060 Ti,nvidia,8,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인. 대역폭은 공식 출처 미확인
-RTX 3060,nvidia,12,TODO,https://www.nvidia.com/en-us/geforce/graphics-cards/compare/,VRAM만 비교표에서 확인 (12 GB 모델). 대역폭은 공식 출처 미확인
+RTX 3060 Ti,nvidia,8,448,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (14 Gbps × 256-bit)"
+RTX 3060,nvidia,12,360,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"버스 폭: NVIDIA 공식 사양. 대역폭: 위키백과 Nvidia GPU 목록, 메모리 속도 × 버스 폭 ÷ 8로 검산 (15 Gbps × 192-bit. 위키백과 표의 대역폭 칸(336)은 같은 표의 15 GT/s·192-bit와 맞지 않아 계산값 360 사용 (판매처 사양표도 360))"
+RTX 3060 8GB,nvidia,8,240,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"15 Gbps × 128-bit ÷ 8 (위키백과 표의 메모리 속도·버스 폭으로 계산, 표의 대역폭 칸 224와 불일치)"
+RTX 3050,nvidia,8,224,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"14 Gbps × 128-bit, 위키백과 표 대역폭과 검산 일치"
+RTX 2080 Ti,nvidia,11,616,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"14 Gbps × 352-bit, 위키백과 표 대역폭과 검산 일치"
+RTX 2080 SUPER,nvidia,8,496,https://www.anandtech.com/show/14663,"AnandTech 리뷰: 15.5 Gbps GDDR6 × 256-bit = 496 GB/s"
+RTX 2080,nvidia,8,448,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"14 Gbps × 256-bit, 위키백과 표 대역폭과 검산 일치"
+RTX 2070 SUPER,nvidia,8,448,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"14 Gbps × 256-bit, 위키백과 표 대역폭과 검산 일치"
+RTX 2070,nvidia,8,448,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"14 Gbps × 256-bit, 위키백과 표 대역폭과 검산 일치"
+RTX 2060 SUPER,nvidia,8,448,https://www.notebookcheck.net/Nvidia-GeForce-RTX-2060-Super-Review-The-entry-level-GPU-finally-comes-with-8-GB-of-VRAM.428103.0.html,"8 GB GDDR6 14 Gbps × 256-bit ÷ 8 (Notebookcheck 리뷰의 메모리 사양으로 계산)"
+RTX 2060,nvidia,6,336,https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units,"14 Gbps × 192-bit, 위키백과 표 대역폭과 검산 일치"
 Apple M1,apple,,68.25,https://en.wikipedia.org/wiki/Apple_M1,"통합 메모리. Apple 사양 페이지에는 표기 없음. 위키백과: LPDDR4X-4266 128-bit, 68.25 GB/s"
 Apple M1 Pro,apple,,200,https://support.apple.com/en-us/111901,통합 메모리 (GPU 사용 가능량 = RAM × apple_gpu_mem_ratio)
 Apple M1 Max,apple,,400,https://support.apple.com/en-us/111901,통합 메모리

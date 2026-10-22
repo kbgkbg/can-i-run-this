@@ -321,7 +321,7 @@ def fit_card(m: dict, hw: Hardware) -> tuple[FitReport, dict[str, SpeedEstimate]
     speeds = estimate_all(m, hw, report)
 
     with st.container(border=True):
-        best = report.best()
+        best = report.best({q: sp.tok_s for q, sp in speeds.items()})
         if report.missing:
             hint = " (gated 모델은 .env에 HF_TOKEN을 넣고 메타데이터를 다시 수집하면 채워집니다)" if m.get("gated") else ""
             st.markdown(f"⚪ **정보 부족** — {', '.join(report.missing)}이(가) 메타데이터에 없어 판정할 수 없습니다{hint}.")
@@ -331,6 +331,10 @@ def fit_card(m: dict, hw: Hardware) -> tuple[FitReport, dict[str, SpeedEstimate]
             sp = speeds[best.quant].tok_s
             st.markdown(f"{VERDICT_ICON[best.verdict]} **{best.quant}: {best.verdict}** — 필요 {best.total_gb:.1f} GB"
                         + (f", 추정 약 {sp:.0f} tok/s" if sp else "") + " (계산값)")
+            precise = max((r for r in report.rows if r.verdict == best.verdict == "GPU에 전부 올라감"), key=lambda r: r.bpw, default=None)
+            if precise and precise.quant != best.quant and speeds[precise.quant].tok_s:
+                st.caption(f"{precise.quant}도 GPU에 올라가지만 약 {speeds[precise.quant].tok_s:.0f} tok/s로 느려, "
+                           f"쓸 만한 속도({get_config()['hardware']['usable_tok_s']} tok/s 이상, 가정값)가 나오는 {best.quant}을 추천합니다.")
 
         c1, c2 = st.columns([1, 3])
         c1.number_input("컨텍스트 길이", min_value=min_ctx, max_value=max_ctx, step=1024, key=key)
@@ -373,7 +377,7 @@ def context_table(m: dict, hw: Hardware, report: FitReport, speeds: dict[str, Sp
         return
     with st.expander("📏 컨텍스트 길이별 차이"):
         quants = [r.quant for r in report.rows]
-        best = report.best()
+        best = report.best({q: sp.tok_s for q, sp in speeds.items()})
         q = st.selectbox("양자화", quants, index=quants.index(best.quant) if best else 0, key=f"ctx_quant::{m['id']}")
         bpw = get_config()["quantization"][q]
         rows = []
@@ -529,7 +533,7 @@ def experience_controls(m: dict, report: FitReport | None, speeds: dict[str, Spe
     """
     usable = [r.quant for r in (report.rows if report else []) if speeds.get(r.quant) and speeds[r.quant].tok_s]
     quants = usable or list(get_config()["quantization"])
-    best = report.best() if report else None
+    best = report.best({q: sp.tok_s for q, sp in speeds.items()}) if report else None
     default = quants.index(best.quant) if best and best.quant in quants else quants.index("Q4_K_M") if "Q4_K_M" in quants else 0
     c1, c2, c3 = st.columns([1, 1, 1])
     speed_on = c1.toggle("내 PC 속도로 체험", key="speed_exp",
