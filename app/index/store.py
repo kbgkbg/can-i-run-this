@@ -39,13 +39,32 @@ def client() -> chromadb.ClientAPI:
 
 
 def get_store(name: str) -> Chroma:
-    # 코사인 거리: OpenAI 임베딩은 정규화돼 있어 코사인이 일반적인 선택이다
+    # 코사인 거리: OpenAI 임베딩은 정규화돼 있어 코사인이 일반적인 선택이다.
+    # 어떤 임베딩 모델로 만든 컬렉션인지 기록해 둔다 (모델을 바꾸면 차원이 달라 섞을 수 없다)
     return Chroma(
         collection_name=name,
         embedding_function=embeddings(),
         client=client(),
-        collection_metadata={"hnsw:space": "cosine"},
+        collection_metadata={"hnsw:space": "cosine", "embedding_model": get_config()["llm"]["embedding_model"]},
     )
+
+
+def embedding_mismatch(name: str) -> str | None:
+    """컬렉션이 지금 설정과 다른 임베딩 모델로 만들어졌으면 그 모델 이름(기록이 없으면 "이전 버전"), 아니면 None."""
+    try:
+        meta = client().get_collection(name).metadata or {}
+    except Exception:
+        return None
+    built = meta.get("embedding_model")
+    return None if built == get_config()["llm"]["embedding_model"] else (built or "이전 버전(text-embedding-3-small)")
+
+
+def reset(name: str) -> None:
+    """컬렉션을 지운다 (색인은 원문 캐시·스냅샷에서 다시 만들 수 있는 파생 데이터다)."""
+    try:
+        client().delete_collection(name)
+    except Exception:
+        pass
 
 
 def count(name: str) -> int:

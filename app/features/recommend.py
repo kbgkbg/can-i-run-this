@@ -89,12 +89,25 @@ def parse_condition(text: str) -> Condition:
     return invoke_json(condition_parse_messages(text), validate, "조건해석") or Condition(query=text)
 
 
+# 검색 문장에서 뺄 하드웨어 표현. GPU에 올라가는지는 must_fit_gpu로 코드에서 따로 거른다.
+# 빼지 않으면 "RTX 3080 GPU와 RAM 32GB에서 실행할 수 있는 코딩용 모델"이 GPU·메모리 단어로 검색돼
+# 코딩 모델이 후보 30건에서 통째로 빠졌다 (gpt-6-luna가 하드웨어를 query에 넣는 일이 잦았다)
+_HW_WORDS = re.compile(r"(?:RTX|GTX|RX|M\d)\s*\w*|\d+\s*(?:GB|기가)|VRAM|RAM|램|GPU|그래픽\s*카드|메모리|내\s*PC|"
+                       r"(?:에서|으로)?\s*(?:실행|돌아가|돌릴|구동)\w*", re.IGNORECASE)
+
+
+def search_query(cond: Condition) -> str:
+    q = re.sub(r"\s{2,}", " ", _HW_WORDS.sub(" ", cond.query)).strip(" ,와과및에서")
+    return q if len(q) >= 2 else cond.query
+
+
 def _search_ids(cond: Condition, k: int) -> list[str]:
     store = get_store(META_COLLECTION)
-    ids = [d.metadata["model_id"] for d in store.similarity_search(cond.query, k=k)]
+    query = search_query(cond)
+    ids = [d.metadata["model_id"] for d in store.similarity_search(query, k=k)]
     for lang in cond.languages:
         tag = f"{LANG_NAMES[lang]}({lang})" if lang in LANG_NAMES else lang
-        ids += [d.metadata["model_id"] for d in store.similarity_search(cond.query, k=k, where_document={"$contains": tag})]
+        ids += [d.metadata["model_id"] for d in store.similarity_search(query, k=k, where_document={"$contains": tag})]
     return list(dict.fromkeys(ids))
 
 

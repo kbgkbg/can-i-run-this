@@ -4,7 +4,7 @@
 
 | 증빙 | 내용 | 재현 명령 |
 |---|---|---|
-| [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 29항목 | `python scripts/run_checks.py` |
+| [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 31항목 | `python scripts/run_checks.py` |
 | [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 12항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
 | [eval/mmr_comparison.md](eval/mmr_comparison.md) | 유사도 vs MMR 근거 비교 (F2014) | `python scripts/compare_mmr.py` |
 | [eval/rag_comparison.md](eval/rag_comparison.md) | RAG 사용 전후 답변 비교 (F2015) | `python scripts/compare_rag.py` |
@@ -113,7 +113,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 
 ## 3. 테스트 결과표
 
-자동 점검 29항목과 화면 점검 12항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
+자동 점검 31항목과 화면 점검 12항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
 
 추가로 개발 중 수동 확인한 비정상·경계 상황:
 

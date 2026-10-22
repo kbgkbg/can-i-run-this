@@ -137,8 +137,11 @@ def _():
     q = "Qwen3-8B 학습에 GPU를 몇 시간 썼고 비용은 얼마였어?"
     s = run(MODEL, q, concept_queries=[])
     a = s["answer"]
-    invented = [n for n in _NUM.findall(_norm_numbers(re.sub(r"\[근거 \d+\]", "", a))) if n not in q]
-    ok = NOT_FOUND not in a and "없" in a and not invented
+    # 근거 문서에 있는 수(예: 기술 보고서 arXiv 번호 2505.09388로 확인처 안내)는 지어낸 것이 아니다
+    ev = " ".join(e.text for e in s["evidence"])
+    invented = [n for n in _NUM.findall(_norm_numbers(re.sub(r"\[근거 \d+\]", "", a)))
+                if n not in q and n not in _norm_numbers(ev)]
+    ok = NOT_FOUND not in a and re.search(r"없|않", a) is not None and not invented  # "없어요"·"나와 있지 않아요"
     return ok, f"고정 문구 {NOT_FOUND in a}, 지어낸 수치 {invented} | {a[:90]}"
 
 
@@ -244,6 +247,22 @@ def _():
            ["Qwen/Qwen3-0.6B", "Qwen/Qwen3-4B", "Qwen/Qwen3-8B", "Qwen/Qwen3-30B-A3B", "Qwen/Qwen3-32B"]}
     exp = ["초소형", "소형", "중형", "중형", "대형"]
     return list(got.values()) == exp, ", ".join(f"{k.split('/')[1]}={v}" for k, v in got.items())
+
+
+@check("F2011", "추천 상담: 사용자가 말하지 않은 언어 조건은 빼고, 말한 언어는 남긴다 (예시 베끼기 회귀)")
+def _():
+    from app.features.consult import _drop_unsaid_language
+    h = [{"role": "user", "content": "코딩용이면 돼. 그래픽카드는 3080, 램 32기가"}]
+    a = _drop_unsaid_language("코딩용 모델, 한국어 지원, 내 GPU에서 돌아가는 거", h)
+    b = _drop_unsaid_language("한국어 되는 코딩용 모델", [{"role": "user", "content": "한국어 되는 코딩 모델"}])
+    return "한국어" not in a and "코딩" in a and "한국어" in b, f"말 안 함 → '{a}' / 말함 → '{b}'"
+
+
+@check("F2011", "조건 탐색 검색 문장에서 하드웨어 말을 뺀다 (GPU는 코드 필터로 따로 거름)")
+def _():
+    from app.features.recommend import Condition, search_query
+    q = search_query(Condition("RTX 3080 GPU와 RAM 32GB에서 실행할 수 있는 코딩용 모델", [], ["code"], None, None, True))
+    return "코딩" in q and not re.search(r"RTX|GPU|RAM|GB", q), f"→ '{q}'"
 
 
 @check("F2011", "대화 속 GPU 이름 매칭 (줄임말·VRAM 구분)")

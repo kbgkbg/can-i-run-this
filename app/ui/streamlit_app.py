@@ -28,7 +28,7 @@ from app.features import consult, persona  # noqa: E402
 from app.features.recommend import Recommendation, search as recommend_search  # noqa: E402
 from app.features.speed import SpeedEstimate, estimate, estimate_all  # noqa: E402
 from app.index.indexer import count_model_docs  # noqa: E402
-from app.index.store import META_COLLECTION, count  # noqa: E402
+from app.index.store import META_COLLECTION, DOCS_COLLECTION, count, embedding_mismatch  # noqa: E402
 from app.log import get_logger  # noqa: E402
 from app.rag.pipeline import ask, user_message  # noqa: E402
 
@@ -39,6 +39,8 @@ MODE_ASK, MODE_CONSULT = "모델에게 묻기", "추천 상담"
 FIRST_ASK_NOTICE = ("⏳ 이 모델에 처음 질문하면 Hugging Face·위키백과·arXiv에서 근거 문서를 찾아 모으느라 "
                     "수십 초 걸릴 수 있습니다. 같은 모델의 다음 질문부터는 모아 둔 문서를 다시 써서 빨라집니다.")
 EXAMPLE_QUESTIONS = ["Q4로 돌리면 메모리 얼마나 필요해?", "권장 샘플링 설정은?", "상업적으로 써도 돼?"]
+PERSONA_EXAMPLES = ["능금이 뭐야?", "사과 5개 중 2개 먹고 3개 더 사서 반을 친구 주면 몇 개 남아?",
+                    "파이썬으로 리스트에서 두 번째로 큰 수 구하는 함수 짜줘"]
 # 질문 입력창이 화면 아래에서 잘 안 보여 말풍선처럼 테두리·그림자로 구분한다 (모드 공통)
 CHAT_INPUT_CSS = """<style>
 /* 테두리는 회색 안쪽 상자에 건다. 바깥 상자에 걸면 안쪽 상자(모서리 8px)가 둥근 테두리 밖으로 삐져나와 모서리가 잘려 보인다 */
@@ -86,6 +88,11 @@ def preflight() -> dict[str, dict] | None:
     if not models or count(META_COLLECTION) == 0:
         st.warning("모델 메타데이터 색인이 비어 있습니다 (0건).\n\n"
                    "터미널에서 `python scripts/build_meta_index.py`를 먼저 실행하세요.")
+        return None
+    old = embedding_mismatch(META_COLLECTION) or embedding_mismatch(DOCS_COLLECTION)
+    if old:
+        st.warning(f"임베딩 모델이 바뀌어({old} → {get_config()['llm']['embedding_model']}) 기존 색인을 쓸 수 없습니다.\n\n"
+                   "터미널에서 `python scripts/build_meta_index.py`를 실행하면 수집해 둔 문서까지 다시 색인합니다 (재수집 없음).")
         return None
     return models
 
@@ -428,8 +435,7 @@ def render_message(msg: dict, stream_tok_s: float | None = None) -> None:
 def render_persona(pa: dict, stream_tok_s: float | None = None) -> None:
     """흉내 답변 (연기)만 말풍선으로 보인다. 근거 답변은 연기의 기준으로만 쓰고 화면에는 내지 않는다."""
     with st.chat_message("🎭", avatar="🎭"):
-        st.markdown(f"**{md_escape(pa['model_id'])} · {pa['quant']} · {pa['tier']} 체급(유효 약 {pa['params_b']}B) 흉내 답변**")
-        st.caption(persona.PERSONA_NOTICE)
+        st.markdown(f"**{md_escape(pa['model_id'])} · {pa['quant']} · {pa['tier']} 체급(유효 약 {pa['params_b']}B)** (연기)")
         if stream_tok_s:
             st.caption(f"⏱ 내 PC 추정 속도 {stream_tok_s:.1f} tok/s로 재생 중 (추정치)")
             st.write_stream(_paced(pa["answer"], stream_tok_s))
@@ -442,8 +448,18 @@ def first_question(m: dict) -> bool:
     return not cache.indexed_docs(m["id"])
 
 
-def welcome(m: dict) -> None:
+def welcome(m: dict, persona_mode: bool = False) -> None:
     """대화가 비어 있을 때: 어디에 무엇을 물으면 되는지 말풍선으로 안내하고 예시 질문을 버튼으로 준다."""
+    if persona_mode:
+        with st.chat_message("🎭", avatar="🎭"):
+            st.markdown(f"**{md_escape(m['name'])}**(연기)와 대화해 보세요. 문서 검색 없이 아무 주제나 됩니다. "
+                        "상식·계산·코딩을 물어보면 이 크기 모델의 수준이 잘 드러납니다.")
+            cols = st.columns(len(PERSONA_EXAMPLES))
+            for col, q in zip(cols, PERSONA_EXAMPLES):
+                col.button(q, key=f"pexample::{q}", width="stretch",
+                           on_click=lambda q=q: st.session_state.__setitem__("pending_question", q))
+            st.caption(persona.PERSONA_NOTICE)
+        return
     with st.chat_message("assistant"):
         st.markdown(f"**{md_escape(m['name'])}**에 대해 물어보세요. 화면 아래 💬 **질문 입력창**에 쓰거나 예시를 눌러도 됩니다.")
         cols = st.columns(len(EXAMPLE_QUESTIONS))
@@ -509,8 +525,9 @@ def experience_controls(m: dict, report: FitReport | None, speeds: dict[str, Spe
         # 모델만 직접 고르고 사양은 건너뛴 경우: 켜는 순간 이 PC를 감지해 바로 쓸 수 있게 한다
         _detect_hw()
         st.rerun()
-    persona_on = c2.toggle("🎭 이 모델 흉내 답변", key="persona_exp",
-                           help="근거 답변 대신, 이 모델 체급이 근거 없이 답했다면 어땠을지 연기한 답만 보여 줍니다. 실제 모델 출력이 아닙니다.")
+    persona_on = c2.toggle("🎭 이 모델과 대화해 보기", key="persona_exp",
+                           help="문서 검색 없이, 이 모델 체급(파라미터 크기)의 로컬 챗봇이라면 어떻게 답할지 연기합니다. "
+                                "아무 주제나 말을 걸어 '이 정도 지능이면 쓸 만한지' 체감해 보세요. 실제 모델 출력이 아닙니다.")
     # 키에 추천 양자화를 넣어, 컨텍스트·모델 변경으로 추천이 바뀌면 기본값도 따라가게 한다
     # (한 키를 쓰면 위젯이 처음 값을 기억해 4k에서의 추천 Q8_0이 32k에서도 남았다)
     quant = c3.selectbox("체험 양자화", quants, index=default, key=f"speed_quant::{m['id']}::{quants[default]}",
@@ -527,19 +544,17 @@ def experience_controls(m: dict, report: FitReport | None, speeds: dict[str, Spe
     return tok_s, (quant if persona_on else None)
 
 
-def add_persona(m: dict, quant: str, question: str, reply: dict) -> None:
-    """RAG 답변을 기준 답으로 이 모델 체급의 흉내 답변을 만들어 reply에 붙인다."""
-    if reply.get("error"):
-        return
-    with st.spinner("이 모델 체급의 답을 연기하는 중..."):
+def persona_reply(m: dict, quant: str, question: str, history: list[tuple[str, str]]) -> dict:
+    """🎭 대화 체험: 문서 검색 없이 이 모델 체급의 대화 상대를 연기한 답."""
+    with st.spinner(f"{m['name']}처럼 생각하는 중... (연기)"):
         try:
-            pa = persona.answer(m, quant, question, base=reply["content"])
-        except Exception:  # noqa: BLE001
+            pa = persona.answer(m, quant, question, history=history)
+        except Exception as e:  # noqa: BLE001
             log.exception("흉내 답변 실패")
-            st.caption("ℹ 흉내 답변을 만들지 못했습니다.")
-            return
-    reply["persona"] = {"model_id": m["id"], "quant": quant, "tier": pa.persona.tier, "params_b": pa.persona.params_b,
-                        "answer": pa.answer, "mistakes": pa.mistakes, "removed": pa.removed_numbers, "added": pa.added_numbers}
+            return {"role": "assistant", "content": f"⚠ {user_message(e)}", "error": True}
+    return {"role": "assistant", "content": pa.answer,
+            "persona": {"model_id": m["id"], "quant": quant, "tier": pa.persona.tier, "params_b": pa.persona.params_b,
+                        "answer": pa.answer, "mistakes": pa.mistakes, "removed": pa.removed_numbers, "added": pa.added_numbers}}
 
 
 # ------------------------------------------------------------------ 추천 상담 (F2011 대화형)
@@ -641,24 +656,30 @@ def main() -> None:
         calc = memory_text(m)  # 사양을 안 골라도 "Q4면 메모리 얼마나?"에는 계산값으로 답한다
         st.info("위에서 내 PC 사양을 고르거나 사이드바에서 하드웨어를 감지하면 이 모델의 실행 가능 판정이 표시됩니다.")
 
-    history = chats().setdefault(m["id"], [])  # 대화 기록은 모델별로 분리 (F2009)
+    # 체험 토글을 대화보다 먼저 그린다: 🎭 대화 체험이면 근거 Q&A와 다른 대화 기록·입력 안내를 쓴다
+    stream_tok_s, persona_quant = experience_controls(m, report, speeds)
+    persona_mode = persona_quant is not None
+    key = f"{m['id']}::persona" if persona_mode else m["id"]
+    history = chats().setdefault(key, [])  # 대화 기록은 모델별로, 근거 Q&A와 🎭 대화는 따로 (F2009)
     # 입력창은 화면 아래에 고정되므로 먼저 받아도 위치는 같다. 질문이 들어온 실행에서는 안내 말풍선을 그리지 않는다
-    typed = st.chat_input(f"💬 {m['name']}에 대해 질문하세요 (예: Q4로 돌리면 메모리 얼마나 필요해?)")
+    placeholder = (f"🎭 {m['name']}(연기)에게 아무거나 말 걸어 보세요" if persona_mode
+                   else f"💬 {m['name']}에 대해 질문하세요 (예: Q4로 돌리면 메모리 얼마나 필요해?)")
+    typed = st.chat_input(placeholder)
     question = typed or st.session_state.pop("pending_question", None)
     for msg in history:
         render_message(msg)
     if not history and not question:
-        welcome(m)
+        welcome(m, persona_mode)
 
-    stream_tok_s, persona_quant = experience_controls(m, report, speeds)
     if question:
         prior = history_for_prompt(history)
         user_msg = {"role": "user", "content": question}
         history.append(user_msg)
         render_message(user_msg)
-        reply = handle_question(m, question, calc, prior)
-        if persona_quant:
-            add_persona(m, persona_quant, question, reply)
+        if persona_mode:
+            reply = persona_reply(m, persona_quant, question, prior)
+        else:
+            reply = handle_question(m, question, calc, prior)
         history.append(reply)
         render_message(reply, stream_tok_s=stream_tok_s)
     render_doc_status(m, docs_slot)

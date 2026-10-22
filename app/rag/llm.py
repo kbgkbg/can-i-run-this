@@ -17,14 +17,21 @@ log = get_logger("llm")
 
 @lru_cache(maxsize=1)
 def chat_model() -> ChatOpenAI:
+    return named_chat_model(get_config()["llm"]["chat_model"])
+
+
+@lru_cache(maxsize=4)
+def named_chat_model(name: str) -> ChatOpenAI:
     cfg = get_config()["llm"]
+    # 추론 모델(gpt-6-luna 등)은 temperature를 기본값만 받아, 설정이 null이면 아예 보내지 않는다
+    extra = {"temperature": cfg["temperature"]} if cfg.get("temperature") is not None else {}
     return ChatOpenAI(
-        model=cfg["chat_model"],
-        temperature=cfg["temperature"],
+        model=name,
         openai_api_key=env("OPENAI_API_KEY"),
         openai_api_base=env("OPENAI_BASE_URL"),
         request_timeout=cfg["request_timeout_s"],
         max_retries=cfg["max_retries"],
+        **extra,
     )
 
 

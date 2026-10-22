@@ -75,6 +75,8 @@ def item_text(model: dict[str, Any]) -> str:
         ("어텐션 레이어 구성", _attention_text(model)),
         ("입력", "텍스트·이미지 (멀티모달)" if model.get("pipeline_tag") == "image-text-to-text" else ""),
         ("라이선스 원문", model.get("license_link") or ""),
+        # HF 태그의 arxiv:번호. "학습 비용은?"처럼 문서에 없는 질문에 확인처(기술 보고서)를 근거와 함께 안내하게 한다
+        ("관련 논문(arXiv)", ", ".join(t.split(":", 1)[1] for t in model.get("tags", []) if t.startswith("arxiv:"))),
         ("기반 모델", ", ".join(model.get("base_model") or [])),
         ("태그(용도)", ", ".join(usage_tags(model))),
     ]

@@ -110,3 +110,19 @@ def count_model_docs(model_id: str) -> int:
         return len(get_store(DOCS_COLLECTION).get(where={"model_id": model_id}, include=[])["ids"])
     except Exception:
         return 0
+
+
+def reindex_cached_docs() -> int:
+    """수집 캐시에 있는 원문을 현재 청크·임베딩 설정으로 model_docs에 다시 색인한다. 반환: 청크 수 합계.
+
+    외부 API를 다시 부르지 않는다 (청크 크기·임베딩 모델을 바꿨을 때 쓴다).
+    """
+    from app.collect import cache  # collect -> index 순환 import를 피해 함수 안에서
+
+    total = 0
+    for model_id, entry in cache.load().items():
+        for doc_id in entry["docs"]:
+            doc = cache.load_doc(doc_id)
+            if doc:
+                total += index_document(doc, model_id)
+    return total

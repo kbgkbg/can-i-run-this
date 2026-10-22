@@ -56,14 +56,21 @@ if case == "ctx":
     out["restored_ctx"] = at.number_input(key="context::Qwen/Qwen3-8B").value
     out["exception"] = len(at.exception)
 if case == "persona":
-    at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-0.6B").run()
+    # 🎭 대화 체험: 문서 검색 없이 아무 주제나 대화, 이전 대화를 기억, 근거 Q&A와 기록 분리
+    # 대형 체급(연출 실수 0개)으로 확인한다. 중형 이하는 의도적으로 틀리므로 기억 확인에 쓸 수 없다
+    at.sidebar.selectbox(key="model_id").select("Qwen/Qwen3-32B").run()
     at.toggle(key="persona_exp").set_value(True).run()
-    at.chat_input[0].set_value("Qwen3-0.6B의 레이어 수와 컨텍스트 길이는?").run()
-    pm = at.chat_message[-1]
+    out["welcome"] = [x.name for x in at.chat_message]
+    out["notice"] = any("연기(시뮬레이션)" in c.value for c in at.caption)
+    at.chat_input[0].set_value("능금이 뭐야?").run()
+    out["status"] = len(at.status)  # RAG 진행 상태(문서 수집)가 없어야 한다
+    at.chat_input[0].set_value("방금 내가 무슨 단어 물어봤지?").run()
     out["names"] = [x.name for x in at.chat_message]
-    out["notice"] = any("연기(시뮬레이션)" in c.value for c in pm.caption)
-    out["expanders"] = len(pm.expander)
-    out["answer"] = [x.value[:80] for x in pm.markdown][1:2]
+    pm = at.chat_message[-1]
+    out["answer1"] = [x.value[:100] for x in at.chat_message[1].markdown][1:2]
+    out["answer2"] = [x.value[:100] for x in pm.markdown][1:2]
+    at.toggle(key="persona_exp").set_value(False).run()
+    out["rag_names"] = [x.name for x in at.chat_message]
     out["exception"] = len(at.exception)
 if case == "speed":
     # 사양을 건너뛰고 모델만 직접 고른 경우에도 속도 체험이 되는지 + 대역폭 TODO GPU에 직접 입력
@@ -158,9 +165,12 @@ def main() -> int:
                  c.get("exception") == 0 and c.get("small_ctx") == 2048 and c.get("restored_ctx") == 32768,
                  f"전환 후 {c.get('small_ctx')}, 복귀 후 {c.get('restored_ctx')}, 예외 {c.get('exception')}"))
     pc = run_case("persona")
-    rows.append(("F2010", "🎭 흉내 답변을 켜면 연기 답변 말풍선만 (근거 답변·바뀐 내용 칸 없음), 연기 안내 표시",
-                 pc.get("exception") == 0 and pc.get("names") == ["user", "🎭"] and pc.get("notice") and pc.get("expanders") == 0,
-                 f"말풍선 {pc.get('names')}, 안내={pc.get('notice')}, 접힌 칸 {pc.get('expanders')}개, 답 {pc.get('answer')}"))
+    rows.append(("F2010", "🎭 대화 체험: 문서 검색 없이 아무 주제나 답하고 이전 대화를 기억, 근거 Q&A 기록과 분리",
+                 pc.get("exception") == 0 and pc.get("welcome") == ["🎭"] and pc.get("notice") and pc.get("status") == 0
+                 and pc.get("names") == ["user", "🎭", "user", "🎭"] and "능금" in "".join(pc.get("answer2", []))
+                 and "자료" not in "".join(pc.get("answer1", [])) and pc.get("rag_names") == ["assistant"],
+                 f"안내 {pc.get('welcome')}, 문서 수집 상태 {pc.get('status')}개, 말풍선 {pc.get('names')}, "
+                 f"답1 {pc.get('answer1')}, 후속 답 {pc.get('answer2')}, 끄면 {pc.get('rag_names')}"))
     sp = run_case("speed")
     rows.append(("F2010", "속도 체험: 사양을 건너뛰고 모델만 골라도 켜면 자동 감지 후 재생, 대역폭 TODO GPU는 직접 입력값으로 재생",
                  sp.get("exception") == 0 and sp.get("detected") != "manual" and bool(sp.get("play_detected"))
