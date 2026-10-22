@@ -25,6 +25,7 @@ from app.features import hw_detect  # noqa: E402
 from app.features.fit import FitReport, assess, calc_text, context_sweep, max_context_on_gpu, memory_text  # noqa: E402
 from app.features.hw_detect import Hardware  # noqa: E402
 from app.features import consult, persona  # noqa: E402
+from app.features import recommend  # noqa: E402
 from app.features.recommend import Recommendation, search as recommend_search  # noqa: E402
 from app.features.speed import SpeedEstimate, estimate, estimate_all  # noqa: E402
 from app.index.indexer import count_model_docs  # noqa: E402
@@ -616,7 +617,12 @@ def consult_page() -> None:
     reply: dict = {"role": "assistant", "content": turn.message, "notes": [turn.hw_note] if turn.hw_note else []}
     if turn.hardware is not None:
         st.session_state["hw"] = turn.hardware.to_dict()
-    if turn.action == "search":
+    named = recommend.named_models(text)
+    if named:
+        # "qwen 3.8 flash next 쓸 수 있음?"처럼 특정 모델을 물으면 조건 검색 대신 그 모델을 바로 판정한다
+        # (조건 검색으로 넘기면 물은 모델이 아니라 엉뚱한 모델 6개가 나왔다)
+        reply.update(named_model_reply(named, current_hw()))
+    elif turn.action == "search":
         with st.spinner("조건에 맞는 모델을 찾는 중..."):
             try:
                 r = recommend_search(turn.condition, current_hw())
@@ -634,6 +640,30 @@ def consult_page() -> None:
             reply["notes"] += r.notes
     history.append(reply)
     render_consult_message(reply, len(history) - 1)
+
+
+def named_model_reply(named: list[str], hw: Hardware | None) -> dict:
+    """이름으로 물은 모델의 판정 카드와 설명(코드가 카드 내용으로 만든다). 안 맞으면 같은 계열 대안을 붙인다."""
+    cards = [recommend.model_card(mid, hw) for mid in named[:3]]
+    if hw is None:
+        return {"content": "물어보신 모델을 찾았어요. 내 PC 사양을 고르거나 GPU·RAM을 알려 주시면 돌아가는지 판정해 드릴게요.",
+                "cards": cards}
+    floor = get_config()["hardware"]["usable_tok_s"]
+    device = hw.spec_name or hw.gpu_name or "GPU 없는 PC"
+    lines, alts = [], []
+    for c in cards:
+        if c.verdict == "GPU에 전부 올라감" and (c.tok_s or 0) >= floor:
+            lines.append(f"**{c.model_id}**은(는) {device}에서 돌릴 수 있어요: {c.quant}로 GPU에 다 올라가고 약 {c.tok_s:.0f} tok/s (계산값).")
+            continue
+        if c.quant:
+            why = f"{c.quant} 기준 {c.verdict}, 필요 {c.total_gb:.1f} GB" + (f", 약 {c.tok_s:.0f} tok/s" if c.tok_s else "")
+        else:
+            why = f"{c.verdict} (어떤 양자화로도 메모리에 안 올라감)" if c.verdict == "불가" else (c.verdict or "판정 불가")
+        lines.append(f"**{c.model_id}**은(는) {device}에서 쓰기 어려워요: {why} (계산값).")
+        alts += [a for a in recommend.same_family_alternatives(c.model_id, hw) if a.model_id not in named]
+    if alts:
+        lines.append("대신 같은 계열에서 이 PC의 GPU에 다 올라가는 모델을 함께 보여 드릴게요.")
+    return {"content": "\n\n".join(lines), "cards": cards + alts[:3]}
 
 
 def render_consult_message(msg: dict, idx: int) -> None:

@@ -132,6 +132,19 @@ if case == "welcome":
     out["after"] = [c.name for c in at.chat_message]
     out["question"] = [mk.value for c in at.chat_message if c.name == "user" for mk in c.markdown][:1]
     out["exception"] = len(at.exception)
+if case == "named":
+    # 추천 상담에서 모델 이름으로 물으면 그 모델 판정 카드 + 같은 계열 대안
+    from app.data_prep.hw_tables import by_name
+    at.sidebar.selectbox(key="side_mac_chip").set_value(by_name("Apple M5 Max (40-core GPU)")).run()
+    at.sidebar.selectbox(key="side_mac_mem").set_value(64).run()
+    at.sidebar.button(key="side_mac_apply").click().run()
+    at.sidebar.radio(key="mode").set_value("추천 상담").run()
+    at.chat_input[0].set_value("qwen 3.8 flash next 쓸 수 있음?").run()
+    msg = at.chat_message[-1]
+    out["reply"] = [x.value for x in msg.markdown][:1]
+    out["cards"] = [x.value for x in msg.markdown if x.value.startswith("**Qwen/")][1:]
+    out["hw"] = (at.session_state["hw"] or {}).get("spec_name")
+    out["exception"] = len(at.exception)
 print("@@" + json.dumps(out, ensure_ascii=False))
 '''
 
@@ -172,6 +185,11 @@ def main() -> int:
                  and "자료" not in "".join(pc.get("answer1", [])) and pc.get("rag_names") == ["assistant"],
                  f"안내 {pc.get('welcome')}, 문서 수집 상태 {pc.get('status')}개, 말풍선 {pc.get('names')}, "
                  f"답1 {pc.get('answer1')}, 후속 답 {pc.get('answer2')}, 끄면 {pc.get('rag_names')}"))
+    nm = run_case("named")
+    rows.append(("F2011", "추천 상담: 모델 이름으로 물으면 그 모델의 내 PC 판정 카드, 안 맞으면 같은 계열 대안 (사양은 그대로 유지)",
+                 nm.get("exception") == 0 and "Qwen3.8-Flash-Next" in "".join(nm.get("reply", [])) and len(nm.get("cards", [])) >= 1
+                 and nm.get("hw") == "Apple M5 Max (40-core GPU)",
+                 f"{str(nm.get('reply'))[:120]} / 카드 {nm.get('cards')} / 사양 {nm.get('hw')}"))
     sp = run_case("speed")
     rows.append(("F2010", "속도 체험: 사양을 건너뛰고 모델만 골라도 켜면 자동 감지 후 재생, 예전 TODO였던 RTX 4070은 사양표 대역폭으로 재생",
                  sp.get("exception") == 0 and sp.get("detected") != "manual" and bool(sp.get("play_detected"))

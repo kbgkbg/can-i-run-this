@@ -275,6 +275,27 @@ def _():
     return got == ["apple", "Apple M5", 11.2, 153.0], f"{got} | {t.hw_note}"
 
 
+@check("F2011", "추천 상담: 모델 이름으로 물으면 그 모델을 찾고(띄어쓰기·꼬리 무시), 안 맞으면 같은 계열 대안")
+def _():
+    from app.features.hw_detect import manual
+    from app.features.recommend import model_card, named_models, same_family_alternatives
+    got = {t: named_models(t) for t in ("qwen 3.8 flash next 쓸 수 있음?", "gemma 4 31b 어때", "코딩용 모델 추천해줘")}
+    hw = manual("Apple M5 Max (40-core GPU)", 64)
+    card = model_card("Qwen/Qwen3.8-Flash-Next", hw)
+    alts = [a.model_id for a in same_family_alternatives("Qwen/Qwen3.8-Flash-Next", hw)]
+    ok = (got["qwen 3.8 flash next 쓸 수 있음?"] == ["Qwen/Qwen3.8-Flash-Next"] and got["gemma 4 31b 어때"] == ["google/gemma-4-31B-it"]
+          and got["코딩용 모델 추천해줘"] == [] and card.verdict == "불가" and alts and all(a.startswith("Qwen/Qwen3.8-") for a in alts))
+    return ok, f"{got} | Flash-Next on M5 Max 64GB: {card.verdict}, 대안 {alts}"
+
+
+@check("F2011", "추천 상담: 사용자가 말하지 않은 하드웨어는 쓰지 않는다 (LLM이 현재 사양을 되풀이해 40코어 -> 32코어로 바뀌던 회귀)")
+def _():
+    from app.features.consult import step
+    from app.features.hw_detect import manual
+    t = step([{"role": "user", "content": "qwen 3.8 flash next 쓸 수 있음?"}], manual("Apple M5 Max (40-core GPU)", 64), 0)
+    return t.hardware is None, f"하드웨어 {t.hardware.spec_name if t.hardware else None}"
+
+
 @check("F2011", "대화 속 GPU 이름 매칭 (줄임말·VRAM 구분)")
 def _():
     from app.data_prep.hw_tables import match_gpu

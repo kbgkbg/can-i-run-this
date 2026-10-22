@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.config import get_config
-from app.data_prep.item_text import LANG_NAMES, item_text, load_models
+from app.data_prep.item_text import LANG_NAMES, format_params, item_text, load_models
 from app.features.fit import GPU_FULL, FitReport, assess
 from app.features.hw_detect import Hardware
 from app.features.speed import estimate_all
@@ -203,3 +203,67 @@ def search(text: str, hw: Hardware | None = None) -> SearchResult:
                 rec.verdict = report.rows[0].verdict if report.rows and report.missing else "불가"
         result.results.append(rec)
     return result
+
+
+def _key(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def named_models(text: str) -> list[str]:
+    """문장에 목록의 모델 이름이 들어 있으면 그 모델 ID들 ("qwen 3.8 flash next 쓸 수 있음?" -> Qwen/Qwen3.8-Flash-Next).
+
+    공백·점·하이픈을 무시하고 맞춘다. 더 긴 이름에 포함되는 짧은 이름은 뺀다 (Qwen3-8B vs Qwen3-8B-Base).
+    너무 짧은 이름(6자 미만, 예: gpt2)은 일반 단어와 헷갈려 쓰지 않는다.
+    """
+    t = _key(text)
+    hits = [m["id"] for m in load_models() if any(len(k) >= 6 and k in t for k in _name_keys(m["name"]))]
+    return [h for h in hits if not any(h != o and _key(models_name(h)) in _key(models_name(o)) for o in hits)]
+
+
+# 사람들이 흔히 빼고 말하는 이름 꼬리 ("gemma 4 31b" -> gemma-4-31B-it)
+_NAME_SUFFIXES = ("-it", "-instruct", "-chat", "-hf")
+
+
+def _name_keys(name: str) -> list[str]:
+    keys = [_key(name)]
+    low = name.lower()
+    for suf in _NAME_SUFFIXES:
+        if low.endswith(suf):
+            keys.append(_key(name[: -len(suf)]))
+    return keys
+
+
+def models_name(model_id: str) -> str:
+    return model_id.split("/", 1)[-1]
+
+
+def model_card(model_id: str, hw: Hardware | None) -> Recommendation:
+    """이름으로 물은 모델 하나의 판정 카드."""
+    m = {x["id"]: x for x in load_models()}[model_id]
+    rec = Recommendation(model_id, "질문하신 모델입니다.", f"파라미터 수: {format_params(m.get('params'))}", m["hf_url"])
+    if hw is not None:
+        report, best = _best_fit(m, hw)
+        if best is not None:
+            rec.verdict, rec.quant, rec.total_gb = best.verdict, best.quant, best.total_gb
+            rec.tok_s = estimate_all(m, hw, report)[best.quant].tok_s
+        else:
+            rec.verdict = "정보 부족" if report.missing else "불가"
+    return rec
+
+
+def same_family_alternatives(model_id: str, hw: Hardware, limit: int = 3) -> list[Recommendation]:
+    """같은 제작사·계열(이름 첫 토큰, 예: Qwen3.8)에서 GPU에 다 올라가고 쓸 만한 속도인 모델, 큰 것부터."""
+    org, name = model_id.split("/", 1)
+    family = name.split("-")[0].lower()  # "Qwen3.8" (글자 앞부분으로 비교하면 Qwen3-8B가 섞였다)
+    floor = get_config()["hardware"]["usable_tok_s"]
+    out = []
+    for m in sorted(load_models(), key=lambda x: -(x.get("params") or 0)):
+        if m["id"] == model_id or m["org"] != org or m["name"].split("-")[0].lower() != family:
+            continue
+        rec = model_card(m["id"], hw)
+        if rec.verdict == GPU_FULL and (rec.tok_s or 0) >= floor:
+            rec.reason = f"같은 {name.split('-')[0]} 계열에서 내 PC의 GPU에 다 올라가는 모델입니다."
+            out.append(rec)
+        if len(out) >= limit:
+            break
+    return out

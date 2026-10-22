@@ -59,6 +59,9 @@ def match_gpu(detected_name: str, vram_gb: float | None = None, gpu_cores: int |
     - 같은 이름에 VRAM만 다른 행(예: 4060 Ti 16GB/8GB)은 감지된 VRAM에 가까운 쪽, VRAM을 모르면 구분자 없는 기본 행.
     - Apple M3/M4 Max처럼 GPU 코어 수로 갈리는 행은 감지된 GPU 코어 수로 고른다.
     """
+    if gpu_cores is None:  # "Apple M5 Max (40-core GPU)"처럼 이름에 코어 수가 들어 있으면 그 값을 쓴다
+        m = re.search(r"(\d+)-core GPU", detected_name)
+        gpu_cores = int(m.group(1)) if m else None
     words = set(_norm(detected_name).split())
     candidates = []
     for s in load_specs():

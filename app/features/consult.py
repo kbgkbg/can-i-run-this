@@ -103,6 +103,16 @@ def step(history: list[dict[str, str]], hw: Hardware | None, asked: int = 0) -> 
         # "맥북 m5 16기가"에서 LLM이 칩을 gpu로 안 넘긴 경우. 사이드바 GPU(예: RTX 5060 Ti)를 이어 쓰면 안 된다
         chip = re.search(r"\bm\s?(\d)\s*(pro|max|ultra)?\b", said, re.IGNORECASE)
         gpu = f"Apple M{chip.group(1)} {chip.group(2) or ''}".strip() if chip else "Apple"
+    # 사용자가 실제로 말한 하드웨어만 쓴다. LLM이 시스템 프롬프트의 "현재 하드웨어"를 되풀이해 gpu로 넘기면
+    # ("Apple M5 Max (40-core GPU)" -> "Apple M5 Max") 코어 수를 잃고 32코어로 바뀌었다
+    said_words = set(re.sub(r"[^a-z0-9]+", " ", said.lower()).split())
+    if gpu and gpu.lower() != "apple":
+        need = set(re.sub(r"[^a-z0-9]+", " ", gpu.lower()).split()) - {"apple", "nvidia", "geforce", "rtx", "gpu", "core"}
+        need = {w for w in need if not re.fullmatch(r"\d+gb|\d+", w) or w in said_words}
+        if not need <= said_words:
+            gpu = ""
+    if ram is not None and not re.search(rf"(?<!\d){int(ram)}(?!\d)", said):
+        ram = None
     if gpu or ram:
         spec = match_gpu(gpu) if gpu else None
         if gpu.lower() == "apple":
