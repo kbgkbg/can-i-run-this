@@ -4,7 +4,7 @@
 
 | 증빙 | 내용 | 재현 명령 |
 |---|---|---|
-| [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 37항목 | `python scripts/run_checks.py` |
+| [eval/test_results.md](eval/test_results.md) | 요구사항 자동 점검 38항목 | `python scripts/run_checks.py` |
 | [eval/ui_test_results.md](eval/ui_test_results.md) | 화면 점검 13항목 (Streamlit AppTest) | `python scripts/ui_checks.py` |
 | [eval/mmr_comparison.md](eval/mmr_comparison.md) | 유사도 vs MMR 근거 비교 (F2014) | `python scripts/compare_mmr.py` |
 | [eval/rag_comparison.md](eval/rag_comparison.md) | RAG 사용 전후 답변 비교 (F2015) | `python scripts/compare_rag.py` |
@@ -113,7 +113,7 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 
 ## 3. 테스트 결과표
 
-자동 점검 37항목과 화면 점검 13항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
+자동 점검 38항목과 화면 점검 13항목의 전체 표는 [eval/test_results.md](eval/test_results.md), [eval/ui_test_results.md](eval/ui_test_results.md).
 
 추가로 개발 중 수동 확인한 비정상·경계 상황:
 
@@ -153,27 +153,33 @@ RAG 없이: 레이어 32 / KV 16 (정답 36/8), 샘플링 0.7/0.9/50 (정답 0.6
 
 ## 5. 화면 캡처 목록
 
-| 파일 | 내용 |
-|---|---|
-| p5_01_initial.png | 첫 화면, 메타데이터 색인 150건 |
-| p5_02_search.png | 모델 검색 선택 |
-| p5_03_selected.png | 선택 모델 헤더, 수집 문서 목록 |
-| p5_04_status.png | 진행 상태 단계 표시 |
-| p5_05_answer.png | 항목마다 근거 번호, 인용 근거 목록 |
-| p6_01_fit_card.png | 하드웨어 직접 입력, 판정 카드(양자화별 표, 대안, 근거·계산식) |
-| p6_02_streaming.png | 내 PC 속도로 체험 (추정 tok/s 재생) |
-| p6_03_answer.png | 판정 답변 (계산값 + [근거 1]) |
-| p7_01_recommend.png | 조건 탐색 결과 카드 |
-| p7_02_license.png | 라이선스 답변 (라이선스 원문 근거, 면책 안내) |
-| p10_01_consult.png | 추천 상담 (되묻기 → 대화 속 하드웨어로 판정이 붙은 카드) |
-| p10_02_persona_streaming.png | 🎭 흉내 답변을 추정 속도로 재생 |
-| p10_03_persona_done.png | 흉내 답변 + 바뀐 수치 비교 (이전 화면. 지금은 흉내 답변을 켜면 연기 답변만 보이고 비교 칸은 없앴다) |
-| p11_01_onboarding_mac.png | 첫 화면 사양 선택 (Mac 탭: 칩·통합 메모리·GPU 비율) |
-| p11_02_context_table.png | 컨텍스트 길이별 차이 표 (M3 Max 40-core · 36GB, Qwen3-8B FP16: 2k 14.4 → 40k 10.7 tok/s) |
-| p12_01_welcome.png | 새 모델(Qwen3.8-27B) 선택 시 안내 말풍선·예시 질문 버튼·첫 질문 소요 안내, 강조된 질문 입력창 |
-| p12_02_conversation.png | 예시 질문 → 계산값 인용 + 일반적인 경우(근거 문서 아님) 대화형 답변 |
-| p12_03_followup.png | 후속 질문 "그럼 Q8로 하면 3090에 다 올라가?"를 이전 대화로 이해해 답변 |
-| p13_01_persona_speed.png | 속도 체험 + 🎭 흉내 답변을 함께 켠 경우: 연기 답변만 추정 속도(52.7 tok/s)로 재생, 모서리를 고친 질문 입력창 |
+2026-10-23에 현재 화면(gpt-6-sol, 인기순 드롭다운, 대화형 답변)으로 전부 다시 찍었다. 설정: 아래 표의 사양 (Mac M3 Max 36GB, RTX 3080 10GB·RAM 32GB, RTX 3090).
+
+| 파일 | 내용 | 확인 항목 |
+|---|---|---|
+| p5_01_initial.png | 첫 화면: 내 PC 사양 선택, 메타데이터 색인 150건 | F2001, F2012 |
+| p5_02_search.png | 모델 드롭다운(인기순, 다운로드 수 표시) | F2009 |
+| p5_03_selected.png | 선택 모델 헤더, 판정 카드, 수집 문서 목록, 안내 말풍선·예시 질문 | F2009, F2010 |
+| p5_04_status.png | 질문 처리 중 진행 상태 단계 표시 | F2012 |
+| p5_05_answer.png | 항목마다 근거 번호, 인용한 근거만 목록에 표시 | F2008 |
+| p6_01_fit_card.png | 판정 카드(양자화별 표, 대안, 근거·계산식) | F2010 |
+| p6_02_streaming.png | 내 PC 속도로 체험 (추정 tok/s 재생) | F2010 |
+| p6_03_answer.png | 판정 답변 (계산값 + [근거 1]) | F2010 |
+| p7_01_recommend.png | 조건 탐색 결과 카드 | F2011 |
+| p7_02_license.png | 라이선스 답변 (라이선스 원문 근거, 면책 안내) | F2010-4, F2012 |
+| p10_01_consult.png | 추천 상담 (되묻기 → 대화 속 하드웨어로 판정이 붙은 카드) | F2011 |
+| p10_02_persona_streaming.png | 🎭 대화(0.6B 연기)를 추정 속도로 재생 | F2010-5 |
+| p10_03_persona_done.png | 🎭 후속 질문까지 이어진 대화 (0.6B: 산수를 틀림) | F2010-5 |
+| p11_01_onboarding_mac.png | 첫 화면 사양 선택 (Mac 탭: 칩·통합 메모리·GPU 비율) | F2010-7 |
+| p11_02_context_table.png | 컨텍스트 길이별 차이 표 | F2010-6 |
+| p12_01_welcome.png | 새 모델 선택 시 안내 말풍선·예시 질문 버튼·첫 질문 소요 안내 | F2009-2 |
+| p12_02_conversation.png | 예시 질문 → 계산값 인용 + "일반적인 경우(근거 문서 아님)" 구분 | F2007, F2009-2 |
+| p12_03_followup.png | 후속 질문을 이전 대화로 이해해 답변 | F2009-2 |
+| p13_01_persona_speed.png | 🎭 대화(27B 연기, 큰 체급은 정답) + 속도 체험 | F2010-5 |
+| p14_01_general_answer.png | 모델과 관계없는 일반 질문(알고리즘)도 답하고 "근거 문서 없음" 안내 | F2007 |
+| p14_02_consult_narrow.png | 상담: 큰 모델이 느리면 이 PC에 맞는 더 작은 모델을 큰 것부터 제시 | F2011 |
+| p14_03_dgx_spark.png | 통합 메모리 PC 탭 (DGX Spark 128GB, GPU 비율) | F2010 |
+| p14_04_dgx_fit.png | DGX Spark에서 Qwen3.8-Flash-Next 판정 | F2010 |
 
 ## 6. 상호 체크리스트 (옆 교육생 점검용)
 

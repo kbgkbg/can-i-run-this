@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import re
 import sys
 import time
 from pathlib import Path
@@ -68,6 +69,15 @@ def _compact(n: int | None) -> str:
         if n >= size:
             return f"{n / size:.1f}{unit}"
     return str(n)
+
+
+_BOLD_BEFORE_HANGUL = re.compile(r"(\*\*[^*\n]+?[)\]}\"'.,!?:;]\*\*)(?=[가-힣])")
+
+
+def fix_bold(text: str) -> str:
+    """"**O(n)**에"처럼 굵게 표시의 닫는 ** 바로 뒤에 한글이 붙으면 마크다운이 굵게로 인식하지 못해 별표가 그대로 보인다
+    (닫는 **가 구두점 뒤에 있으면 뒤가 공백·구두점이어야 한다는 CommonMark 규칙). 눈에 안 띄는 얇은 공백(U+200A)을 끼워 막는다."""
+    return _BOLD_BEFORE_HANGUL.sub("\\1\u200a", text)
 
 
 def md_escape(text: str) -> str:
@@ -458,9 +468,9 @@ def render_message(msg: dict, stream_tok_s: float | None = None) -> None:
         if msg["role"] == "assistant" and not msg.get("error"):
             _speed_caption(msg, stream_tok_s)
         if stream_tok_s and msg["role"] == "assistant" and not msg.get("error"):
-            st.write_stream(_paced(msg["content"], stream_tok_s))
+            st.write_stream(_paced(fix_bold(msg["content"]), stream_tok_s))
         else:
-            st.markdown(msg["content"])
+            st.markdown(fix_bold(msg["content"]))
         if msg["role"] == "assistant" and not msg.get("error"):
             render_sources(msg)
             if msg.get("unverified"):
@@ -479,9 +489,9 @@ def render_persona(msg: dict, stream_tok_s: float | None = None) -> None:
         st.markdown(f"**{md_escape(pa['model_id'])} · {pa['quant']} · {pa['tier']} 체급(유효 약 {pa['params_b']}B)** (연기)")
         _speed_caption(msg, stream_tok_s)
         if stream_tok_s:
-            st.write_stream(_paced(pa["answer"], stream_tok_s))
+            st.write_stream(_paced(fix_bold(pa["answer"]), stream_tok_s))
         else:
-            st.markdown(pa["answer"])
+            st.markdown(fix_bold(pa["answer"]))
 
 
 def first_question(m: dict) -> bool:
@@ -754,8 +764,12 @@ def main() -> None:
     question = typed or st.session_state.pop("pending_question", None)
     for msg in history:
         render_message(msg)
+    # 안내 말풍선 자리는 늘 잡아 둔다. 질문이 들어온 실행에서 말풍선을 아예 안 그리면, 답을 만드는 동안
+    # 이전 실행의 예시 버튼이 흐린 잔상으로 질문 아래에 남았다 (Streamlit은 실행이 끝날 때까지 이전 요소를 남긴다)
+    welcome_slot = st.empty()
     if not history and not question:
-        welcome(m, persona_mode)
+        with welcome_slot.container():
+            welcome(m, persona_mode)
 
     if question:
         prior = history_for_prompt(history)

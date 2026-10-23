@@ -18,6 +18,19 @@
 
 ---
 
+## 화면 미리보기
+
+| | |
+|---|---|
+| **내 PC 사양 선택** (Mac·NVIDIA·통합 메모리·GPU 없음 탭)<br>![사양 선택](docs/screenshots/p11_01_onboarding_mac.png) | **모델 판정 + 속도 + 근거 계산식** (양자화별 표)<br>![판정 카드](docs/screenshots/p6_01_fit_card.png) |
+| **근거를 단 답변** (인용한 근거만 원문 링크와 함께)<br>![근거 답변](docs/screenshots/p5_05_answer.png) | **컨텍스트 길이별 차이** (KV 캐시·메모리·속도)<br>![컨텍스트 표](docs/screenshots/p11_02_context_table.png) |
+| **대화형 답변** (근거 / 일반 지식 구분, 후속 질문 이해)<br>![대화](docs/screenshots/p12_03_followup.png) | **추천 상담** (안 맞으면 더 작은 모델로 좁혀 감)<br>![상담](docs/screenshots/p14_02_consult_narrow.png) |
+| **🎭 이 모델과 대화해 보기** (0.6B 연기: 산수를 틀림)<br>![초소형](docs/screenshots/p10_03_persona_done.png) | **같은 질문, 27B 연기** (정답) + 속도 체험<br>![대형](docs/screenshots/p13_01_persona_speed.png) |
+
+전체 캡처와 확인 항목은 [docs/03_verification.md](docs/03_verification.md) 5장.
+
+---
+
 ## 1. 실행 방법
 
 Python 3.10 이상 (개발·검증: 3.13).
@@ -63,7 +76,7 @@ streamlit run app/ui/streamlit_app.py
 ### 검증·실험 스크립트
 | 명령 | 용도 |
 |---|---|
-| `python scripts/run_checks.py` | 요구사항 자동 점검 37항목 → `docs/eval/test_results.md` |
+| `python scripts/run_checks.py` | 요구사항 자동 점검 38항목 → `docs/eval/test_results.md` |
 | `python scripts/ui_checks.py` | 화면 점검 13항목 (첫 화면 사양 선택, 빈 대화 안내·예시 질문, 속도 체험 자동 감지·대역폭 직접 입력, 모델별 대화, 진행 상태, 키 누락·색인 0건·잘못된 키, 컨텍스트 전환 회귀, 흉내 답변, 추천 상담) → `docs/eval/ui_test_results.md` |
 | `python scripts/collect_demo.py "<모델ID>" "<질문>"` | 프롬프트 1 검색어, 후보, 프롬프트 2 선별/제외, 색인 결과, 캐시 사용 여부 |
 | `python scripts/ask_demo.py "<모델ID>" "<질문>" [--top-k N] [--search-type mmr]` | 근거 목록, 답변, 인용 근거, 수치 검증 경고 |

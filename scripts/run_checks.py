@@ -285,6 +285,18 @@ def _():
     return got == ["apple", "Apple M5", 11.2, 153.0], f"{got} | {t.hw_note}"
 
 
+@check("F2008", "굵게 표시(**…**) 뒤에 한글 조사가 붙어도 굵게로 렌더링되도록 보정 (O(n)에 -> 별표가 그대로 보이던 문제)")
+def _():
+    import re as _re
+    src = (PROJECT_ROOT / "app/ui/streamlit_app.py").read_text(encoding="utf-8")
+    ns = {"re": _re}
+    exec(src[src.index("_BOLD_BEFORE_HANGUL"):src.index("def md_escape")], ns)  # noqa: S102 - 우리 코드의 순수 함수만 꺼내 검사
+    f = ns["fix_bold"]
+    fixed = f("**O(n)**에 구하고 **Q4_K_M**으로 돌려요 **굵게** 뒤 공백")
+    ok = "**O(n)**\u200a에" in fixed and "**Q4_K_M**으로" in fixed and fixed.endswith("**굵게** 뒤 공백")
+    return ok, repr(fixed)
+
+
 @check("F2011", "추천 상담: 큰 모델이 안 맞으면 '못 돌림'으로 끝내지 않고 이 PC에 맞는 더 작은 모델을 큰 것부터 제시")
 def _():
     from app.features.hw_detect import manual
