@@ -14,7 +14,7 @@
 | [docs/02_rag_design.md](docs/02_rag_design.md) | RAG 파이프라인 설계문서: 컬렉션, 청킹, 프롬프트, Top-k, 겪은 문제와 해결 |
 | [docs/03_verification.md](docs/03_verification.md) | 검증 결과: 요구사항 대조표, 테스트 결과표, 상호 체크리스트 |
 | [docs/eval/](docs/eval/) | 자동 점검 결과, MMR 비교, RAG 전후 비교 |
-| [docs/checklist/체크리스트.xlsx](docs/checklist/체크리스트.xlsx) | 체크리스트 (3일차 양식, 27항목: 통과 24 · 미확인 1 · 해당없음 2) |
+| [체크리스트.xlsx](체크리스트.xlsx) | 체크리스트 (3일차 양식, 27항목: 통과 24 · 미확인 1 · 해당없음 2) |
 | [data/SOURCES.md](data/SOURCES.md) | 데이터·문서 출처와 이용 조건 |
 
 ---
